@@ -5,6 +5,18 @@ packages:
 templates:
   ctl.erb: bin/ctl
   filer.toml.erb: config/filer.toml
+
+provides:
+  - name: seaweedfs-filer
+    type: seaweedfs-filer
+    properties:
+      - seaweedfs.filer.port
+
+consumes:
+  - name: seaweedfs-master
+    type: seaweedfs-master
+    optional: true
+
 properties:
   seaweedfs.filer.port:
     description: "Port for filer server"

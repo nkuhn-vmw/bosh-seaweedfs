@@ -1,0 +1,8 @@
+---
+name: seaweedfs-broker
+
+dependencies:
+  - golang-1.21
+
+files:
+  - seaweedfs-broker/**/*

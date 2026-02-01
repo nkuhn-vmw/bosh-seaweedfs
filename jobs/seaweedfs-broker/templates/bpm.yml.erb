@@ -1,0 +1,9 @@
+processes:
+  - name: seaweedfs-broker
+    executable: /var/vcap/packages/seaweedfs-broker/bin/seaweedfs-broker
+    env:
+      BROKER_CONFIG_PATH: /var/vcap/jobs/seaweedfs-broker/config/broker.yml
+    persistent_disk: true
+    additional_volumes:
+      - path: /var/vcap/store/seaweedfs-broker
+        writable: true

@@ -1,0 +1,40 @@
+#!/bin/bash
+
+set -e
+
+RUN_DIR=/var/vcap/sys/run/seaweedfs-broker
+LOG_DIR=/var/vcap/sys/log/seaweedfs-broker
+STORE_DIR=/var/vcap/store/seaweedfs-broker
+PIDFILE=$RUN_DIR/seaweedfs-broker.pid
+
+JOB_DIR=/var/vcap/jobs/seaweedfs-broker
+PKG_DIR=/var/vcap/packages/seaweedfs-broker
+
+export PATH=$PKG_DIR/bin:$PATH
+
+case $1 in
+
+  start)
+    mkdir -p $RUN_DIR $LOG_DIR $STORE_DIR
+    chown -R vcap:vcap $RUN_DIR $LOG_DIR $STORE_DIR
+
+    echo $$ > $PIDFILE
+
+    exec chpst -u vcap:vcap $PKG_DIR/bin/seaweedfs-broker \
+      >> $LOG_DIR/seaweedfs-broker.stdout.log \
+      2>> $LOG_DIR/seaweedfs-broker.stderr.log
+    ;;
+
+  stop)
+    if [ -f $PIDFILE ]; then
+      kill -TERM $(cat $PIDFILE) || true
+      rm -f $PIDFILE
+    fi
+    ;;
+
+  *)
+    echo "Usage: ctl {start|stop}"
+    exit 1
+    ;;
+
+esac

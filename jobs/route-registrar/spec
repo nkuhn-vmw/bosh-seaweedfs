@@ -1,0 +1,121 @@
+---
+name: route-registrar
+
+templates:
+  ctl.erb: bin/ctl
+  registrar_settings.json.erb: config/registrar_settings.json
+
+packages: []
+
+consumes:
+  - name: nats
+    type: nats
+    optional: false
+  - name: nats-tls
+    type: nats-tls
+    optional: true
+  - name: seaweedfs-s3
+    type: seaweedfs-s3
+    optional: true
+  - name: seaweedfs-broker
+    type: seaweedfs-broker
+    optional: true
+
+properties:
+  route_registrar.routes:
+    description: |
+      Array of route registration configurations. Each route can include:
+        - name: unique name for this route
+        - type: route type (default: "http")
+        - port: port to route to
+        - uris: array of URIs to route
+        - registration_interval: how often to register (default: 20s)
+        - tags: optional route tags
+        - health_check: optional health check configuration
+            - name: health check name
+            - script_path: path to health check script
+            - timeout: health check timeout
+    default: []
+
+  route_registrar.host:
+    description: "IP address or hostname to register for routes"
+    default: ""
+
+  nats.machines:
+    description: "IP addresses of NATS servers (when not using link)"
+    default: []
+
+  nats.port:
+    description: "Port for NATS servers"
+    default: 4222
+
+  nats.user:
+    description: "NATS username"
+    default: ""
+
+  nats.password:
+    description: "NATS password"
+    default: ""
+
+  nats.tls.enabled:
+    description: "Enable TLS for NATS connections"
+    default: false
+
+  nats.tls.ca_cert:
+    description: "CA certificate for NATS TLS"
+    default: ""
+
+  nats.tls.client_cert:
+    description: "Client certificate for NATS TLS"
+    default: ""
+
+  nats.tls.client_key:
+    description: "Client private key for NATS TLS"
+    default: ""
+
+  route_registrar.routing_api.enabled:
+    description: "Enable Routing API for TCP routes"
+    default: false
+
+  route_registrar.routing_api.uri:
+    description: "Routing API URI"
+    default: ""
+
+  route_registrar.routing_api.port:
+    description: "Routing API port"
+    default: 3000
+
+  route_registrar.routing_api.auth_disabled:
+    description: "Disable authentication for Routing API"
+    default: false
+
+  route_registrar.routing_api.client_id:
+    description: "OAuth client ID for Routing API"
+    default: ""
+
+  route_registrar.routing_api.client_secret:
+    description: "OAuth client secret for Routing API"
+    default: ""
+
+  route_registrar.routing_api.ca_certs:
+    description: "CA certificates for Routing API"
+    default: ""
+
+  # SeaweedFS-specific route configuration
+  seaweedfs.route_registrar.s3_route:
+    description: "Route configuration for S3 endpoint"
+    default:
+      enabled: true
+      uri: "s3.seaweedfs.example.com"
+
+  seaweedfs.route_registrar.broker_route:
+    description: "Route configuration for service broker endpoint"
+    default:
+      enabled: true
+      uri: "seaweedfs-broker.example.com"
+
+  seaweedfs.route_registrar.filer_route:
+    description: "Route configuration for filer endpoint"
+    default:
+      enabled: false
+      uri: "filer.seaweedfs.example.com"

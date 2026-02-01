@@ -1,0 +1,27 @@
+#!/bin/bash
+
+set -e -x
+
+export GOROOT=$(readlink -nf /var/vcap/packages/golang-1.21)
+export GOPATH=${BOSH_INSTALL_TARGET}
+export PATH=${GOROOT}/bin:${PATH}
+
+mkdir -p ${BOSH_INSTALL_TARGET}/bin
+mkdir -p ${BOSH_INSTALL_TARGET}/src
+
+# Copy source code
+cp -a seaweedfs-broker/* ${BOSH_INSTALL_TARGET}/src/
+
+cd ${BOSH_INSTALL_TARGET}/src
+
+# Download dependencies
+export GOPROXY=https://proxy.golang.org,direct
+go mod download
+
+# Build the broker
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+  -o ${BOSH_INSTALL_TARGET}/bin/seaweedfs-broker \
+  .
+
+# Clean up source after build
+rm -rf ${BOSH_INSTALL_TARGET}/src

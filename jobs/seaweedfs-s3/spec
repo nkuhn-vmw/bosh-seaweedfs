@@ -5,6 +5,20 @@ packages:
 templates:
   ctl.erb: bin/ctl
   s3.json.erb: config/s3.json
+  tls_cert.pem.erb: config/certs/tls_cert.pem
+  tls_key.pem.erb: config/certs/tls_key.pem
+
+provides:
+  - name: seaweedfs-s3
+    type: seaweedfs-s3
+    properties:
+      - seaweedfs.s3.port
+
+consumes:
+  - name: seaweedfs-filer
+    type: seaweedfs-filer
+    optional: true
+
 properties:
   seaweedfs.s3.port:
     description: "Port for S3 gateway"
@@ -27,6 +41,18 @@ properties:
   seaweedfs.s3.allow_empty_folder:
     description: "Allow creating empty folder"
     default: false
+
+  # TLS configuration
+  seaweedfs.s3.tls.enabled:
+    description: "Enable TLS for S3 endpoint"
+    default: false
+  seaweedfs.s3.tls.certificate:
+    description: "TLS certificate for S3 endpoint"
+    default: ""
+  seaweedfs.s3.tls.private_key:
+    description: "TLS private key for S3 endpoint"
+    default: ""
+
   seaweedfs.s3.config.enabled:
     description: "Enable S3 config file with credentials"
     default: false
