@@ -1,0 +1,61 @@
+#!/bin/bash
+
+set -e
+
+RUN_DIR=/var/vcap/sys/run/seaweedfs-volume
+LOG_DIR=/var/vcap/sys/log/seaweedfs-volume
+DATA_DIR=/var/vcap/store/seaweedfs-volume
+PIDFILE=${RUN_DIR}/seaweedfs-volume.pid
+WEED=/var/vcap/packages/seaweedfs/weed
+
+case $1 in
+  start)
+    mkdir -p ${RUN_DIR} ${LOG_DIR} ${DATA_DIR}
+    chown -R vcap:vcap ${RUN_DIR} ${LOG_DIR} ${DATA_DIR}
+
+    EXTRA_ARGS=""
+    <% if p('seaweedfs.volume.data_center') != "" %>
+    EXTRA_ARGS="${EXTRA_ARGS} -dataCenter=<%= p('seaweedfs.volume.data_center') %>"
+    <% end %>
+    <% if p('seaweedfs.volume.rack') != "" %>
+    EXTRA_ARGS="${EXTRA_ARGS} -rack=<%= p('seaweedfs.volume.rack') %>"
+    <% end %>
+    <% if p('seaweedfs.volume.public_url') != "" %>
+    EXTRA_ARGS="${EXTRA_ARGS} -publicUrl=<%= p('seaweedfs.volume.public_url') %>"
+    <% end %>
+    <% if p('seaweedfs.volume.compaction_mb_per_second') > 0 %>
+    EXTRA_ARGS="${EXTRA_ARGS} -compactionMBps=<%= p('seaweedfs.volume.compaction_mb_per_second') %>"
+    <% end %>
+
+    exec chpst -u vcap:vcap ${WEED} volume \
+      -ip.bind=<%= p('seaweedfs.volume.ip_bind') %> \
+      -port=<%= p('seaweedfs.volume.port') %> \
+      -port.grpc=<%= p('seaweedfs.volume.port_grpc') %> \
+      -mserver=<%= p('seaweedfs.volume.master') %> \
+      -dir=${DATA_DIR} \
+      -max=<%= p('seaweedfs.volume.max_volumes') %> \
+      -metricsPort=<%= p('seaweedfs.volume.metrics_port') %> \
+      -readMode=<%= p('seaweedfs.volume.read_mode') %> \
+      ${EXTRA_ARGS} \
+      >> ${LOG_DIR}/seaweedfs-volume.stdout.log \
+      2>> ${LOG_DIR}/seaweedfs-volume.stderr.log &
+
+    echo $! > ${PIDFILE}
+    ;;
+
+  stop)
+    if [ -f ${PIDFILE} ]; then
+      PID=$(cat ${PIDFILE})
+      kill ${PID} || true
+      while kill -0 ${PID} 2>/dev/null; do
+        sleep 1
+      done
+      rm -f ${PIDFILE}
+    fi
+    ;;
+
+  *)
+    echo "Usage: ctl {start|stop}"
+    exit 1
+    ;;
+esac

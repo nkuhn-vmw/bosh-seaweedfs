@@ -1,0 +1,40 @@
+---
+name: seaweedfs-volume
+packages:
+  - seaweedfs
+templates:
+  ctl.erb: bin/ctl
+properties:
+  seaweedfs.volume.port:
+    description: "Port for volume server"
+    default: 8080
+  seaweedfs.volume.port_grpc:
+    description: "gRPC port for volume server"
+    default: 18080
+  seaweedfs.volume.master:
+    description: "Master server address(es), comma-separated"
+    default: "localhost:9333"
+  seaweedfs.volume.max_volumes:
+    description: "Maximum number of volumes"
+    default: 100
+  seaweedfs.volume.data_center:
+    description: "Data center name for this volume server"
+    default: ""
+  seaweedfs.volume.rack:
+    description: "Rack name for this volume server"
+    default: ""
+  seaweedfs.volume.metrics_port:
+    description: "Metrics port for Prometheus"
+    default: 9325
+  seaweedfs.volume.ip_bind:
+    description: "IP address to bind to"
+    default: "0.0.0.0"
+  seaweedfs.volume.public_url:
+    description: "Public URL for volume server (for external access)"
+    default: ""
+  seaweedfs.volume.compaction_mb_per_second:
+    description: "Compaction speed limit in MB/s"
+    default: 0
+  seaweedfs.volume.read_mode:
+    description: "Read mode: proxy or redirect"
+    default: "proxy"

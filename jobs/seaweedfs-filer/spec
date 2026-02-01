@@ -1,0 +1,53 @@
+---
+name: seaweedfs-filer
+packages:
+  - seaweedfs
+templates:
+  ctl.erb: bin/ctl
+  filer.toml.erb: config/filer.toml
+properties:
+  seaweedfs.filer.port:
+    description: "Port for filer server"
+    default: 8888
+  seaweedfs.filer.port_grpc:
+    description: "gRPC port for filer server"
+    default: 18888
+  seaweedfs.filer.master:
+    description: "Master server address(es), comma-separated"
+    default: "localhost:9333"
+  seaweedfs.filer.default_replication:
+    description: "Default replication type for filer"
+    default: ""
+  seaweedfs.filer.metrics_port:
+    description: "Metrics port for Prometheus"
+    default: 9326
+  seaweedfs.filer.ip_bind:
+    description: "IP address to bind to"
+    default: "0.0.0.0"
+  seaweedfs.filer.max_mb:
+    description: "Maximum file size in MB"
+    default: 256
+  seaweedfs.filer.dir_list_limit:
+    description: "Directory listing limit"
+    default: 100000
+  seaweedfs.filer.store:
+    description: "Filer store configuration (leveldb2, leveldb3, mysql, postgres, etc.)"
+    default: "leveldb2"
+  seaweedfs.filer.mysql.enabled:
+    description: "Enable MySQL backend for filer"
+    default: false
+  seaweedfs.filer.mysql.hostname:
+    description: "MySQL hostname"
+    default: "localhost"
+  seaweedfs.filer.mysql.port:
+    description: "MySQL port"
+    default: 3306
+  seaweedfs.filer.mysql.username:
+    description: "MySQL username"
+    default: "seaweedfs"
+  seaweedfs.filer.mysql.password:
+    description: "MySQL password"
+    default: ""
+  seaweedfs.filer.mysql.database:
+    description: "MySQL database name"
+    default: "seaweedfs"

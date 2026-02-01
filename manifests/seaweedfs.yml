@@ -1,0 +1,90 @@
+---
+name: seaweedfs
+
+releases:
+  - name: seaweedfs
+    version: latest
+
+stemcells:
+  - alias: default
+    os: ubuntu-jammy
+    version: latest
+
+update:
+  canaries: 1
+  max_in_flight: 1
+  canary_watch_time: 1000-60000
+  update_watch_time: 1000-60000
+
+instance_groups:
+  - name: seaweedfs-master
+    instances: 1
+    azs: [z1]
+    vm_type: default
+    stemcell: default
+    persistent_disk_type: default
+    networks:
+      - name: default
+    jobs:
+      - name: seaweedfs-master
+        release: seaweedfs
+        properties:
+          seaweedfs:
+            master:
+              port: 9333
+              default_replication: "000"
+              volume_size_limit_mb: 30000
+
+  - name: seaweedfs-volume
+    instances: 3
+    azs: [z1, z2, z3]
+    vm_type: default
+    stemcell: default
+    persistent_disk_type: large
+    networks:
+      - name: default
+    jobs:
+      - name: seaweedfs-volume
+        release: seaweedfs
+        properties:
+          seaweedfs:
+            volume:
+              master: "((seaweedfs_master_address)):9333"
+              max_volumes: 100
+
+  - name: seaweedfs-filer
+    instances: 1
+    azs: [z1]
+    vm_type: default
+    stemcell: default
+    persistent_disk_type: default
+    networks:
+      - name: default
+    jobs:
+      - name: seaweedfs-filer
+        release: seaweedfs
+        properties:
+          seaweedfs:
+            filer:
+              master: "((seaweedfs_master_address)):9333"
+
+  - name: seaweedfs-s3
+    instances: 1
+    azs: [z1]
+    vm_type: default
+    stemcell: default
+    networks:
+      - name: default
+    jobs:
+      - name: seaweedfs-s3
+        release: seaweedfs
+        properties:
+          seaweedfs:
+            s3:
+              filer: "((seaweedfs_filer_address)):8888"
+
+variables:
+  - name: seaweedfs_master_address
+    type: value
+  - name: seaweedfs_filer_address
+    type: value

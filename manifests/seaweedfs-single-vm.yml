@@ -1,0 +1,61 @@
+---
+name: seaweedfs
+
+releases:
+  - name: seaweedfs
+    version: latest
+
+stemcells:
+  - alias: default
+    os: ubuntu-jammy
+    version: latest
+
+update:
+  canaries: 1
+  max_in_flight: 1
+  canary_watch_time: 1000-60000
+  update_watch_time: 1000-60000
+
+instance_groups:
+  - name: seaweedfs
+    instances: 1
+    azs: [z1]
+    vm_type: default
+    stemcell: default
+    persistent_disk_type: large
+    networks:
+      - name: default
+    jobs:
+      - name: seaweedfs-master
+        release: seaweedfs
+        properties:
+          seaweedfs:
+            master:
+              port: 9333
+              default_replication: "000"
+              volume_size_limit_mb: 30000
+
+      - name: seaweedfs-volume
+        release: seaweedfs
+        properties:
+          seaweedfs:
+            volume:
+              master: "127.0.0.1:9333"
+              port: 8080
+              max_volumes: 100
+
+      - name: seaweedfs-filer
+        release: seaweedfs
+        properties:
+          seaweedfs:
+            filer:
+              master: "127.0.0.1:9333"
+              port: 8888
+
+      - name: seaweedfs-s3
+        release: seaweedfs
+        properties:
+          seaweedfs:
+            s3:
+              filer: "127.0.0.1:8888"
+              port: 8333

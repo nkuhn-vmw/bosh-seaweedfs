@@ -1,0 +1,23 @@
+# SeaweedFS Filer Configuration
+
+[leveldb2]
+enabled = <%= p('seaweedfs.filer.store') == 'leveldb2' %>
+dir = "/var/vcap/store/seaweedfs-filer/filerldb2"
+
+[leveldb3]
+enabled = <%= p('seaweedfs.filer.store') == 'leveldb3' %>
+dir = "/var/vcap/store/seaweedfs-filer/filerldb3"
+
+<% if p('seaweedfs.filer.mysql.enabled') %>
+[mysql]
+enabled = true
+hostname = "<%= p('seaweedfs.filer.mysql.hostname') %>"
+port = <%= p('seaweedfs.filer.mysql.port') %>
+username = "<%= p('seaweedfs.filer.mysql.username') %>"
+password = "<%= p('seaweedfs.filer.mysql.password') %>"
+database = "<%= p('seaweedfs.filer.mysql.database') %>"
+connection_max_idle = 2
+connection_max_open = 100
+connection_max_lifetime_seconds = 0
+interpolateParams = false
+<% end %>

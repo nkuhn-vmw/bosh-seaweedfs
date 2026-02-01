@@ -1,0 +1,28 @@
+---
+name: seaweedfs-master
+packages:
+  - seaweedfs
+templates:
+  ctl.erb: bin/ctl
+properties:
+  seaweedfs.master.port:
+    description: "Port for master server"
+    default: 9333
+  seaweedfs.master.port_grpc:
+    description: "gRPC port for master server"
+    default: 19333
+  seaweedfs.master.volume_size_limit_mb:
+    description: "Volume size limit in MB"
+    default: 30000
+  seaweedfs.master.default_replication:
+    description: "Default replication type (e.g., 000, 001, 010, 100, 110, 200)"
+    default: "000"
+  seaweedfs.master.peers:
+    description: "List of other master peers for HA (comma-separated host:port)"
+    default: ""
+  seaweedfs.master.metrics_port:
+    description: "Metrics port for Prometheus"
+    default: 9324
+  seaweedfs.master.ip_bind:
+    description: "IP address to bind to"
+    default: "0.0.0.0"

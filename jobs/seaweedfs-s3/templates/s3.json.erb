@@ -1,0 +1,23 @@
+{
+  "identities": [
+<% identities = p('seaweedfs.s3.config.identities') %>
+<% identities.each_with_index do |identity, idx| %>
+    {
+      "name": "<%= identity['name'] %>",
+      "credentials": [
+<% identity['credentials'].each_with_index do |cred, cred_idx| %>
+        {
+          "accessKey": "<%= cred['accessKey'] %>",
+          "secretKey": "<%= cred['secretKey'] %>"
+        }<%= cred_idx < identity['credentials'].length - 1 ? ',' : '' %>
+<% end %>
+      ],
+      "actions": [
+<% identity['actions'].each_with_index do |action, action_idx| %>
+        "<%= action %>"<%= action_idx < identity['actions'].length - 1 ? ',' : '' %>
+<% end %>
+      ]
+    }<%= idx < identities.length - 1 ? ',' : '' %>
+<% end %>
+  ]
+}

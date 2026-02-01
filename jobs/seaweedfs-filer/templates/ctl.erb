@@ -1,0 +1,52 @@
+#!/bin/bash
+
+set -e
+
+RUN_DIR=/var/vcap/sys/run/seaweedfs-filer
+LOG_DIR=/var/vcap/sys/log/seaweedfs-filer
+DATA_DIR=/var/vcap/store/seaweedfs-filer
+CONFIG_DIR=/var/vcap/jobs/seaweedfs-filer/config
+PIDFILE=${RUN_DIR}/seaweedfs-filer.pid
+WEED=/var/vcap/packages/seaweedfs/weed
+
+case $1 in
+  start)
+    mkdir -p ${RUN_DIR} ${LOG_DIR} ${DATA_DIR}
+    chown -R vcap:vcap ${RUN_DIR} ${LOG_DIR} ${DATA_DIR}
+
+    EXTRA_ARGS=""
+    <% if p('seaweedfs.filer.default_replication') != "" %>
+    EXTRA_ARGS="${EXTRA_ARGS} -defaultReplicaPlacement=<%= p('seaweedfs.filer.default_replication') %>"
+    <% end %>
+
+    exec chpst -u vcap:vcap ${WEED} filer \
+      -ip.bind=<%= p('seaweedfs.filer.ip_bind') %> \
+      -port=<%= p('seaweedfs.filer.port') %> \
+      -port.grpc=<%= p('seaweedfs.filer.port_grpc') %> \
+      -master=<%= p('seaweedfs.filer.master') %> \
+      -metricsPort=<%= p('seaweedfs.filer.metrics_port') %> \
+      -maxMB=<%= p('seaweedfs.filer.max_mb') %> \
+      -dirListLimit=<%= p('seaweedfs.filer.dir_list_limit') %> \
+      ${EXTRA_ARGS} \
+      >> ${LOG_DIR}/seaweedfs-filer.stdout.log \
+      2>> ${LOG_DIR}/seaweedfs-filer.stderr.log &
+
+    echo $! > ${PIDFILE}
+    ;;
+
+  stop)
+    if [ -f ${PIDFILE} ]; then
+      PID=$(cat ${PIDFILE})
+      kill ${PID} || true
+      while kill -0 ${PID} 2>/dev/null; do
+        sleep 1
+      done
+      rm -f ${PIDFILE}
+    fi
+    ;;
+
+  *)
+    echo "Usage: ctl {start|stop}"
+    exit 1
+    ;;
+esac

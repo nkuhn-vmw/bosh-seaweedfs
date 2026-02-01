@@ -1,0 +1,53 @@
+#!/bin/bash
+
+set -e
+
+RUN_DIR=/var/vcap/sys/run/seaweedfs-s3
+LOG_DIR=/var/vcap/sys/log/seaweedfs-s3
+CONFIG_DIR=/var/vcap/jobs/seaweedfs-s3/config
+PIDFILE=${RUN_DIR}/seaweedfs-s3.pid
+WEED=/var/vcap/packages/seaweedfs/weed
+
+case $1 in
+  start)
+    mkdir -p ${RUN_DIR} ${LOG_DIR}
+    chown -R vcap:vcap ${RUN_DIR} ${LOG_DIR}
+
+    EXTRA_ARGS=""
+    <% if p('seaweedfs.s3.domain_name') != "" %>
+    EXTRA_ARGS="${EXTRA_ARGS} -domainName=<%= p('seaweedfs.s3.domain_name') %>"
+    <% end %>
+    <% if p('seaweedfs.s3.config.enabled') %>
+    EXTRA_ARGS="${EXTRA_ARGS} -config=${CONFIG_DIR}/s3.json"
+    <% end %>
+
+    exec chpst -u vcap:vcap ${WEED} s3 \
+      -ip.bind=<%= p('seaweedfs.s3.ip_bind') %> \
+      -port=<%= p('seaweedfs.s3.port') %> \
+      -port.grpc=<%= p('seaweedfs.s3.port_grpc') %> \
+      -filer=<%= p('seaweedfs.s3.filer') %> \
+      -metricsPort=<%= p('seaweedfs.s3.metrics_port') %> \
+      -allowEmptyFolder=<%= p('seaweedfs.s3.allow_empty_folder') %> \
+      ${EXTRA_ARGS} \
+      >> ${LOG_DIR}/seaweedfs-s3.stdout.log \
+      2>> ${LOG_DIR}/seaweedfs-s3.stderr.log &
+
+    echo $! > ${PIDFILE}
+    ;;
+
+  stop)
+    if [ -f ${PIDFILE} ]; then
+      PID=$(cat ${PIDFILE})
+      kill ${PID} || true
+      while kill -0 ${PID} 2>/dev/null; do
+        sleep 1
+      done
+      rm -f ${PIDFILE}
+    fi
+    ;;
+
+  *)
+    echo "Usage: ctl {start|stop}"
+    exit 1
+    ;;
+esac

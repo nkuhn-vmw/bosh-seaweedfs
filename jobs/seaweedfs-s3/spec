@@ -1,0 +1,50 @@
+---
+name: seaweedfs-s3
+packages:
+  - seaweedfs
+templates:
+  ctl.erb: bin/ctl
+  s3.json.erb: config/s3.json
+properties:
+  seaweedfs.s3.port:
+    description: "Port for S3 gateway"
+    default: 8333
+  seaweedfs.s3.port_grpc:
+    description: "gRPC port for S3 gateway"
+    default: 18333
+  seaweedfs.s3.filer:
+    description: "Filer server address"
+    default: "localhost:8888"
+  seaweedfs.s3.ip_bind:
+    description: "IP address to bind to"
+    default: "0.0.0.0"
+  seaweedfs.s3.metrics_port:
+    description: "Metrics port for Prometheus"
+    default: 9327
+  seaweedfs.s3.domain_name:
+    description: "Domain name for virtual hosted-style requests"
+    default: ""
+  seaweedfs.s3.allow_empty_folder:
+    description: "Allow creating empty folder"
+    default: false
+  seaweedfs.s3.config.enabled:
+    description: "Enable S3 config file with credentials"
+    default: false
+  seaweedfs.s3.config.identities:
+    description: "List of S3 identities with credentials"
+    default: []
+    example:
+      - name: admin
+        credentials:
+          - accessKey: "AKIAIOSFODNN7EXAMPLE"
+            secretKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+        actions:
+          - "Admin"
+          - "Read"
+          - "Write"
+      - name: readonly
+        credentials:
+          - accessKey: "AKIAIOSFODNN7READONLY"
+            secretKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYREADONLY"
+        actions:
+          - "Read"

@@ -1,0 +1,51 @@
+#!/bin/bash
+
+set -e
+
+RUN_DIR=/var/vcap/sys/run/seaweedfs-master
+LOG_DIR=/var/vcap/sys/log/seaweedfs-master
+DATA_DIR=/var/vcap/store/seaweedfs-master
+PIDFILE=${RUN_DIR}/seaweedfs-master.pid
+WEED=/var/vcap/packages/seaweedfs/weed
+
+case $1 in
+  start)
+    mkdir -p ${RUN_DIR} ${LOG_DIR} ${DATA_DIR}
+    chown -R vcap:vcap ${RUN_DIR} ${LOG_DIR} ${DATA_DIR}
+
+    PEERS_ARG=""
+    <% if p('seaweedfs.master.peers') != "" %>
+    PEERS_ARG="-peers=<%= p('seaweedfs.master.peers') %>"
+    <% end %>
+
+    exec chpst -u vcap:vcap ${WEED} master \
+      -ip.bind=<%= p('seaweedfs.master.ip_bind') %> \
+      -port=<%= p('seaweedfs.master.port') %> \
+      -port.grpc=<%= p('seaweedfs.master.port_grpc') %> \
+      -mdir=${DATA_DIR} \
+      -volumeSizeLimitMB=<%= p('seaweedfs.master.volume_size_limit_mb') %> \
+      -defaultReplication=<%= p('seaweedfs.master.default_replication') %> \
+      -metricsPort=<%= p('seaweedfs.master.metrics_port') %> \
+      ${PEERS_ARG} \
+      >> ${LOG_DIR}/seaweedfs-master.stdout.log \
+      2>> ${LOG_DIR}/seaweedfs-master.stderr.log &
+
+    echo $! > ${PIDFILE}
+    ;;
+
+  stop)
+    if [ -f ${PIDFILE} ]; then
+      PID=$(cat ${PIDFILE})
+      kill ${PID} || true
+      while kill -0 ${PID} 2>/dev/null; do
+        sleep 1
+      done
+      rm -f ${PIDFILE}
+    fi
+    ;;
+
+  *)
+    echo "Usage: ctl {start|stop}"
+    exit 1
+    ;;
+esac
