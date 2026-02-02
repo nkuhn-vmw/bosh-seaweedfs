@@ -30,22 +30,38 @@ echo ""
 echo "=== Creating BOSH Release ==="
 cd "${RELEASE_DIR}"
 
-# Add blobs if not already added
-if [ -d "blobs" ] && [ -n "$(ls -A blobs 2>/dev/null)" ]; then
-  echo "Blobs already present"
-else
-  echo "Downloading required blobs..."
+# Download and add required blobs
+echo "Checking and downloading required blobs..."
 
-  # Download Go for building the broker
-  GO_VERSION="1.21.6"
-  if [ ! -f "blobs/golang/go${GO_VERSION}.linux-amd64.tar.gz" ]; then
-    mkdir -p blobs/golang
-    echo "Downloading Go ${GO_VERSION}..."
-    curl -sL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
-      -o "blobs/golang/go${GO_VERSION}.linux-amd64.tar.gz"
-    bosh add-blob "blobs/golang/go${GO_VERSION}.linux-amd64.tar.gz" "golang/go${GO_VERSION}.linux-amd64.tar.gz"
-  fi
+# SeaweedFS binary
+SEAWEEDFS_BLOB_VERSION="4.07"
+if [ ! -f "blobs/seaweedfs/linux_amd64.tar.gz" ]; then
+  mkdir -p blobs/seaweedfs
+  echo "Downloading SeaweedFS ${SEAWEEDFS_BLOB_VERSION}..."
+  curl -sL "https://github.com/seaweedfs/seaweedfs/releases/download/${SEAWEEDFS_BLOB_VERSION}/linux_amd64.tar.gz" \
+    -o "blobs/seaweedfs/linux_amd64.tar.gz"
+  bosh add-blob "blobs/seaweedfs/linux_amd64.tar.gz" "seaweedfs/linux_amd64.tar.gz"
+else
+  echo "SeaweedFS blob already present"
 fi
+
+# Go toolchain for building the broker
+GO_VERSION="1.21.6"
+if [ ! -f "blobs/golang/go${GO_VERSION}.linux-amd64.tar.gz" ]; then
+  mkdir -p blobs/golang
+  echo "Downloading Go ${GO_VERSION}..."
+  curl -sL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
+    -o "blobs/golang/go${GO_VERSION}.linux-amd64.tar.gz"
+  bosh add-blob "blobs/golang/go${GO_VERSION}.linux-amd64.tar.gz" "golang/go${GO_VERSION}.linux-amd64.tar.gz"
+else
+  echo "Go blob already present"
+fi
+
+# Create broker source tarball
+echo "Creating broker source tarball..."
+mkdir -p blobs/seaweedfs-broker
+tar -czf blobs/seaweedfs-broker/seaweedfs-broker.tar.gz -C src/seaweedfs-broker .
+bosh add-blob "blobs/seaweedfs-broker/seaweedfs-broker.tar.gz" "seaweedfs-broker/seaweedfs-broker.tar.gz"
 
 # Create the release
 echo "Creating BOSH release..."
@@ -85,9 +101,14 @@ mkdir -p "${TILE_BUILD}/migrations"
 # Copy metadata
 cp "${TILE_DIR}/metadata/tile.yml" "${TILE_BUILD}/metadata/"
 
-# Update version in metadata
-sed -i "s/product_version:.*/product_version: \"${TILE_VERSION}\"/" "${TILE_BUILD}/metadata/tile.yml"
-sed -i "s/version: \"1.0.0\"/version: \"${SEAWEEDFS_RELEASE_VERSION}\"/" "${TILE_BUILD}/metadata/tile.yml"
+# Update version in metadata (cross-platform sed)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  sed -i '' "s/product_version:.*/product_version: \"${TILE_VERSION}\"/" "${TILE_BUILD}/metadata/tile.yml"
+  sed -i '' "s/version: \"1.0.0\"/version: \"${SEAWEEDFS_RELEASE_VERSION}\"/" "${TILE_BUILD}/metadata/tile.yml"
+else
+  sed -i "s/product_version:.*/product_version: \"${TILE_VERSION}\"/" "${TILE_BUILD}/metadata/tile.yml"
+  sed -i "s/version: \"1.0.0\"/version: \"${SEAWEEDFS_RELEASE_VERSION}\"/" "${TILE_BUILD}/metadata/tile.yml"
+fi
 
 # Copy releases
 cp "${BUILD_DIR}/seaweedfs-${SEAWEEDFS_RELEASE_VERSION}.tgz" \

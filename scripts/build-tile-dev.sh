@@ -36,8 +36,14 @@ bosh create-release --force --tarball="${BUILD_DIR}/tile/releases/seaweedfs-${TI
 
 # Copy and update metadata
 cp "${TILE_DIR}/metadata/tile.yml" "${BUILD_DIR}/tile/metadata/"
-sed -i "s/product_version:.*/product_version: \"${TILE_VERSION}\"/" \
-  "${BUILD_DIR}/tile/metadata/tile.yml"
+# Cross-platform sed
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  sed -i '' "s/product_version:.*/product_version: \"${TILE_VERSION}\"/" \
+    "${BUILD_DIR}/tile/metadata/tile.yml"
+else
+  sed -i "s/product_version:.*/product_version: \"${TILE_VERSION}\"/" \
+    "${BUILD_DIR}/tile/metadata/tile.yml"
+fi
 
 # Create placeholder releases for dependencies
 echo "Creating placeholder release files..."
