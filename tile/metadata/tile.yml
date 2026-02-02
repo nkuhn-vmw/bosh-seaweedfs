@@ -187,6 +187,7 @@ job_types:
     max_in_flight: 1
     instance_definition:
       name: instances
+      label: Instances
       type: integer
       default: 1
       configurable: true
@@ -223,6 +224,7 @@ job_types:
     max_in_flight: 1
     instance_definition:
       name: instances
+      label: Instances
       type: integer
       default: 3
       configurable: true
@@ -259,6 +261,7 @@ job_types:
     max_in_flight: 1
     instance_definition:
       name: instances
+      label: Instances
       type: integer
       default: 1
       configurable: true
@@ -300,6 +303,7 @@ job_types:
     max_in_flight: 1
     instance_definition:
       name: instances
+      label: Instances
       type: integer
       default: 1
       configurable: true
@@ -362,6 +366,7 @@ job_types:
     max_in_flight: 1
     instance_definition:
       name: instances
+      label: Instances
       type: integer
       default: 1
       configurable: true
@@ -419,6 +424,7 @@ job_types:
     max_in_flight: 1
     instance_definition:
       name: instances
+      label: Instances
       type: integer
       default: 1
     manifest: |
@@ -458,6 +464,7 @@ job_types:
     max_in_flight: 1
     instance_definition:
       name: instances
+      label: Instances
       type: integer
       default: 1
     manifest: |
