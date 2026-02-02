@@ -29,6 +29,44 @@ releases:
 property_blueprints:
   - name: generated_rsa_cert_credentials
     type: rsa_cert_credentials
+  - name: master_count
+    type: integer
+    default: 1
+    configurable: true
+  - name: volume_count
+    type: integer
+    default: 3
+    configurable: true
+  - name: replication
+    type: string
+    default: "000"
+    configurable: true
+  - name: broker_username
+    type: string
+    default: "admin"
+    configurable: true
+  - name: broker_password
+    type: secret
+    configurable: true
+  - name: s3_admin_access_key
+    type: string
+    default: "admin"
+    configurable: true
+  - name: s3_admin_secret_key
+    type: secret
+    configurable: true
+  - name: s3_route_hostname
+    type: string
+    configurable: true
+    optional: true
+  - name: broker_route_hostname
+    type: string
+    configurable: true
+    optional: true
+  - name: enable_tls
+    type: boolean
+    default: false
+    configurable: true
 
 form_types:
   - name: seaweedfs_cluster_config

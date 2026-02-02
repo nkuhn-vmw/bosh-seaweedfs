@@ -71,10 +71,10 @@ jobs:
           bosh add-blob blobs/seaweedfs/linux_amd64.tar.gz seaweedfs/linux_amd64.tar.gz
           bosh add-blob blobs/golang/go1.21.6.linux-amd64.tar.gz golang/go1.21.6.linux-amd64.tar.gz
 
-          # Copy broker source to blobs location
+          # Create tarball of broker source and add as blob
           mkdir -p blobs/seaweedfs-broker
-          cp -r src/seaweedfs-broker/* blobs/seaweedfs-broker/
-          bosh add-blob blobs/seaweedfs-broker seaweedfs-broker
+          tar -czf blobs/seaweedfs-broker/seaweedfs-broker.tar.gz -C src/seaweedfs-broker .
+          bosh add-blob blobs/seaweedfs-broker/seaweedfs-broker.tar.gz seaweedfs-broker/seaweedfs-broker.tar.gz
 
       - name: Create BOSH release
         run: |
@@ -167,7 +167,7 @@ jobs:
       - name: Build broker
         run: |
           cd src/seaweedfs-broker
-          go mod download
+          go mod tidy
           go build -v -o seaweedfs-broker .
 
       - name: Run broker tests

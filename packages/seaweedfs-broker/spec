@@ -5,4 +5,4 @@ dependencies:
   - golang-1.21
 
 files:
-  - seaweedfs-broker/**/*
+  - seaweedfs-broker/seaweedfs-broker.tar.gz
