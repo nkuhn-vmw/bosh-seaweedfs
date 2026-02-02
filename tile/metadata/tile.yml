@@ -29,6 +29,7 @@ releases:
 property_blueprints:
   - name: generated_rsa_cert_credentials
     type: rsa_cert_credentials
+    label: Generated RSA Certificate
   - name: master_count
     type: integer
     label: Master Node Count
