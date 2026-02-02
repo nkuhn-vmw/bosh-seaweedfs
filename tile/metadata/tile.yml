@@ -67,6 +67,18 @@ property_blueprints:
     type: boolean
     default: false
     configurable: true
+  - name: cf_api_url
+    type: string
+    configurable: true
+    optional: true
+  - name: cf_admin_username
+    type: string
+    default: "admin"
+    configurable: true
+  - name: cf_admin_password
+    type: secret
+    configurable: true
+    optional: true
 
 form_types:
   - name: seaweedfs_cluster_config
@@ -108,6 +120,20 @@ form_types:
         label: Enable TLS
         description: Enable TLS for all endpoints
 
+  - name: seaweedfs_cf_config
+    label: Cloud Foundry Configuration
+    description: Configure Cloud Foundry integration for broker registration
+    property_inputs:
+      - reference: .properties.cf_api_url
+        label: CF API URL
+        description: Cloud Foundry API endpoint (e.g., https://api.sys.example.com)
+      - reference: .properties.cf_admin_username
+        label: CF Admin Username
+        description: Cloud Foundry admin username for broker registration
+      - reference: .properties.cf_admin_password
+        label: CF Admin Password
+        description: Cloud Foundry admin password for broker registration
+
 job_types:
   - name: seaweedfs-master
     resource_label: SeaweedFS Master
@@ -126,6 +152,8 @@ job_types:
       - name: persistent_disk
         type: integer
         default: 10240
+        constraints:
+          min: 1024
       - name: cpu
         type: integer
         default: 1
@@ -163,6 +191,8 @@ job_types:
       - name: persistent_disk
         type: integer
         default: 102400
+        constraints:
+          min: 10240
       - name: cpu
         type: integer
         default: 2
@@ -200,6 +230,8 @@ job_types:
       - name: persistent_disk
         type: integer
         default: 10240
+        constraints:
+          min: 1024
       - name: cpu
         type: integer
         default: 2
@@ -239,6 +271,11 @@ job_types:
       - name: ephemeral_disk
         type: integer
         default: 4096
+      - name: persistent_disk
+        type: integer
+        default: 1024
+        constraints:
+          min: 1024
       - name: cpu
         type: integer
         default: 1
@@ -302,6 +339,8 @@ job_types:
       - name: persistent_disk
         type: integer
         default: 1024
+        constraints:
+          min: 1024
       - name: cpu
         type: integer
         default: 1
@@ -344,14 +383,91 @@ job_types:
             uris:
               - (( .properties.broker_route_hostname.value ))
 
+  - name: register-broker
+    resource_label: Register Broker Errand
+    errand: true
+    templates:
+      - name: register-broker
+        release: seaweedfs
+    resource_definitions:
+      - name: ram
+        type: integer
+        default: 1024
+      - name: ephemeral_disk
+        type: integer
+        default: 4096
+      - name: persistent_disk
+        type: integer
+        default: 1024
+        constraints:
+          min: 1024
+      - name: cpu
+        type: integer
+        default: 1
+    static_ip: 0
+    dynamic_ip: 1
+    max_in_flight: 1
+    instance_definition:
+      name: instances
+      type: integer
+      default: 1
+    property_blueprints:
+      - name: vm_credentials
+        type: salted_credentials
+    manifest: |
+      cf:
+        api_url: (( .properties.cf_api_url.value ))
+        admin_username: (( .properties.cf_admin_username.value ))
+        admin_password: (( .properties.cf_admin_password.value ))
+      broker:
+        name: seaweedfs
+        url: (( "http://" ..seaweedfs-broker.first_ip ":8080" ))
+        username: (( .properties.broker_username.value ))
+        password: (( .properties.broker_password.value ))
+
+  - name: deregister-broker
+    resource_label: Deregister Broker Errand
+    errand: true
+    templates:
+      - name: deregister-broker
+        release: seaweedfs
+    resource_definitions:
+      - name: ram
+        type: integer
+        default: 1024
+      - name: ephemeral_disk
+        type: integer
+        default: 4096
+      - name: persistent_disk
+        type: integer
+        default: 1024
+        constraints:
+          min: 1024
+      - name: cpu
+        type: integer
+        default: 1
+    static_ip: 0
+    dynamic_ip: 1
+    max_in_flight: 1
+    instance_definition:
+      name: instances
+      type: integer
+      default: 1
+    property_blueprints:
+      - name: vm_credentials
+        type: salted_credentials
+    manifest: |
+      cf:
+        api_url: (( .properties.cf_api_url.value ))
+        admin_username: (( .properties.cf_admin_username.value ))
+        admin_password: (( .properties.cf_admin_password.value ))
+      broker:
+        name: seaweedfs
+
 post_deploy_errands:
   - name: register-broker
-    label: Register Service Broker
-    description: Register the SeaweedFS service broker with Cloud Foundry
 
 pre_delete_errands:
   - name: deregister-broker
-    label: Deregister Service Broker
-    description: Deregister the SeaweedFS service broker from Cloud Foundry
 
 runtime_configs: []
