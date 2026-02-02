@@ -14,6 +14,7 @@ stemcell_criteria:
   os: ubuntu-jammy
   version: "1.0"
   requires_cpi: false
+  enable_patch_security_updates: true
 
 releases:
   - name: seaweedfs
@@ -30,6 +31,7 @@ property_blueprints:
   - name: generated_rsa_cert_credentials
     type: rsa_cert_credentials
     label: Generated RSA Certificate
+    configurable: false
   - name: master_count
     type: integer
     label: Master Node Count
