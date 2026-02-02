@@ -1,0 +1,7 @@
+---
+name: golang-1.21
+
+dependencies: []
+
+files:
+  - golang/go1.21.*.linux-amd64.tar.gz

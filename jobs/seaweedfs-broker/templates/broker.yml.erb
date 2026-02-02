@@ -1,0 +1,104 @@
+<%
+  broker = p('seaweedfs.broker')
+
+  # Handle shared cluster endpoint from link or property
+  shared_s3_endpoint = p('seaweedfs.broker.shared_cluster.s3_endpoint')
+  if_link('seaweedfs-s3') do |s3_link|
+    if shared_s3_endpoint.empty?
+      s3_instance = s3_link.instances.first
+      shared_s3_endpoint = "#{s3_instance.address}:#{s3_link.p('seaweedfs.s3.port')}"
+    end
+  end
+%>
+---
+listen_addr: ":<%= p('seaweedfs.broker.port') %>"
+log_level: "<%= p('seaweedfs.broker.log_level') %>"
+
+auth:
+  username: "<%= p('seaweedfs.broker.auth.username') %>"
+  password: "<%= p('seaweedfs.broker.auth.password') %>"
+
+tls:
+  enabled: <%= p('seaweedfs.broker.tls.enabled') %>
+<% if p('seaweedfs.broker.tls.enabled') %>
+  cert_file: "/var/vcap/jobs/seaweedfs-broker/config/certs/server.crt"
+  key_file: "/var/vcap/jobs/seaweedfs-broker/config/certs/server.key"
+<% end %>
+
+catalog:
+  services:
+    - id: "<%= p('seaweedfs.broker.catalog.service_id') %>"
+      name: "<%= p('seaweedfs.broker.catalog.service_name') %>"
+      description: "<%= p('seaweedfs.broker.catalog.service_description') %>"
+      bindable: true
+      tags:
+        - seaweedfs
+        - s3
+        - object-storage
+        - blob-storage
+      metadata:
+        displayName: "SeaweedFS"
+        imageUrl: "https://seaweedfs.github.io/seaweedfs/images/SeaweedFS_Logo.png"
+        longDescription: "SeaweedFS is a distributed storage system for blobs, objects, files, and data lake, with O(1) disk seek and cloud tiering."
+        providerDisplayName: "SeaweedFS"
+        documentationUrl: "https://github.com/seaweedfs/seaweedfs/wiki"
+        supportUrl: "https://github.com/seaweedfs/seaweedfs/issues"
+      plans:
+<% p('seaweedfs.broker.catalog.plans').each do |plan| %>
+        - id: "<%= plan['id'] %>"
+          name: "<%= plan['name'] %>"
+          description: "<%= plan['description'] %>"
+          free: <%= plan['free'] %>
+          plan_type: "<%= plan['plan_type'] %>"
+          metadata:
+            displayName: "<%= plan['name'].capitalize %>"
+            bullets:
+<% if plan['plan_type'] == 'shared' %>
+              - "Shared SeaweedFS cluster"
+              - "Dedicated S3 bucket"
+              - "S3-compatible API"
+<% else %>
+              - "Dedicated SeaweedFS cluster"
+              - "Isolated compute and storage"
+              - "Configurable cluster size"
+<% end %>
+<% if plan['dedicated_config'] %>
+          dedicated_config:
+            vm_type: "<%= plan['dedicated_config']['vm_type'] %>"
+            disk_type: "<%= plan['dedicated_config']['disk_type'] %>"
+            master_nodes: <%= plan['dedicated_config']['master_nodes'] %>
+            volume_nodes: <%= plan['dedicated_config']['volume_nodes'] %>
+            filer_nodes: <%= plan['dedicated_config']['filer_nodes'] %>
+            network: "<%= plan['dedicated_config']['network'] %>"
+            azs:
+<% plan['dedicated_config']['azs'].each do |az| %>
+              - "<%= az %>"
+<% end %>
+<% end %>
+<% end %>
+
+shared_cluster:
+  s3_endpoint: "<%= shared_s3_endpoint %>"
+  filer_endpoint: "<%= p('seaweedfs.broker.shared_cluster.filer_endpoint') %>"
+  access_key: "<%= p('seaweedfs.broker.shared_cluster.access_key') %>"
+  secret_key: "<%= p('seaweedfs.broker.shared_cluster.secret_key') %>"
+  use_ssl: <%= p('seaweedfs.broker.shared_cluster.use_ssl') %>
+  region: "<%= p('seaweedfs.broker.shared_cluster.region') %>"
+
+bosh:
+  director_url: "<%= p('seaweedfs.broker.bosh.director_url') %>"
+<% if !p('seaweedfs.broker.bosh.director_ca_cert').empty? %>
+  director_ca_cert: |
+<%= p('seaweedfs.broker.bosh.director_ca_cert').gsub(/^/, '    ') %>
+<% end %>
+  client_id: "<%= p('seaweedfs.broker.bosh.client_id') %>"
+  client_secret: "<%= p('seaweedfs.broker.bosh.client_secret') %>"
+  deployment_prefix: "<%= p('seaweedfs.broker.bosh.deployment_prefix') %>"
+  release_name: "<%= p('seaweedfs.broker.bosh.release_name') %>"
+  release_version: "<%= p('seaweedfs.broker.bosh.release_version') %>"
+  stemcell_os: "<%= p('seaweedfs.broker.bosh.stemcell_os') %>"
+  stemcell_version: "<%= p('seaweedfs.broker.bosh.stemcell_version') %>"
+
+state_store:
+  type: "file"
+  path: "/var/vcap/store/seaweedfs-broker/state.json"

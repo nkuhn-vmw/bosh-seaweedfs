@@ -1,0 +1,48 @@
+#!/bin/bash
+
+set -e
+
+RUN_DIR=/var/vcap/sys/run/route-registrar
+LOG_DIR=/var/vcap/sys/log/route-registrar
+PIDFILE=$RUN_DIR/route-registrar.pid
+
+JOB_DIR=/var/vcap/jobs/route-registrar
+
+# Route registrar is typically provided by cf-routing-release
+# This script manages the registration process using the configuration we generate
+
+case $1 in
+
+  start)
+    mkdir -p $RUN_DIR $LOG_DIR
+    chown -R vcap:vcap $RUN_DIR $LOG_DIR
+
+    # If route_registrar binary exists (from cf-routing-release)
+    if [ -x /var/vcap/packages/route_registrar/bin/route-registrar ]; then
+      echo $$ > $PIDFILE
+
+      exec chpst -u vcap:vcap /var/vcap/packages/route_registrar/bin/route-registrar \
+        -configPath=$JOB_DIR/config/registrar_settings.json \
+        >> $LOG_DIR/route-registrar.stdout.log \
+        2>> $LOG_DIR/route-registrar.stderr.log
+    else
+      echo "route_registrar binary not found, skipping..."
+      echo $$ > $PIDFILE
+      # Sleep indefinitely - this allows the job to be "running" but passive
+      exec sleep infinity
+    fi
+    ;;
+
+  stop)
+    if [ -f $PIDFILE ]; then
+      kill -TERM $(cat $PIDFILE) || true
+      rm -f $PIDFILE
+    fi
+    ;;
+
+  *)
+    echo "Usage: ctl {start|stop}"
+    exit 1
+    ;;
+
+esac

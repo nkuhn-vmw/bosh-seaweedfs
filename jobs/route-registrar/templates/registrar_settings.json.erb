@@ -1,0 +1,94 @@
+<%
+  require 'json'
+
+  def get_host
+    return p('route_registrar.host') unless p('route_registrar.host').empty?
+    spec.ip
+  end
+
+  # Build NATS configuration
+  nats_machines = []
+  nats_port = p('nats.port')
+  nats_user = p('nats.user')
+  nats_password = p('nats.password')
+
+  if_link('nats') do |nats_link|
+    nats_link.instances.each do |instance|
+      nats_machines << instance.address
+    end
+    nats_port = nats_link.p('nats.port') rescue nats_port
+    nats_user = nats_link.p('nats.user') rescue nats_user
+    nats_password = nats_link.p('nats.password') rescue nats_password
+  end
+
+  if nats_machines.empty?
+    nats_machines = p('nats.machines')
+  end
+
+  # Build routes configuration
+  routes = p('route_registrar.routes').dup
+
+  # Add S3 route if enabled and linked
+  s3_route_config = p('seaweedfs.route_registrar.s3_route')
+  if s3_route_config['enabled']
+    if_link('seaweedfs-s3') do |s3_link|
+      s3_instance = s3_link.instances.first
+      s3_port = s3_link.p('seaweedfs.s3.port') rescue 8333
+      routes << {
+        'name' => 'seaweedfs-s3',
+        'port' => s3_port,
+        'registration_interval' => '20s',
+        'uris' => [s3_route_config['uri']],
+        'tags' => {
+          'component' => 'seaweedfs-s3'
+        }
+      }
+    end
+  end
+
+  # Add broker route if enabled and linked
+  broker_route_config = p('seaweedfs.route_registrar.broker_route')
+  if broker_route_config['enabled']
+    if_link('seaweedfs-broker') do |broker_link|
+      broker_port = broker_link.p('seaweedfs.broker.port') rescue 8080
+      routes << {
+        'name' => 'seaweedfs-broker',
+        'port' => broker_port,
+        'registration_interval' => '20s',
+        'uris' => [broker_route_config['uri']],
+        'tags' => {
+          'component' => 'seaweedfs-broker'
+        }
+      }
+    end
+  end
+
+  # Build message bus servers list
+  message_bus_servers = nats_machines.map do |machine|
+    {
+      'host' => "#{machine}:#{nats_port}",
+      'user' => nats_user,
+      'password' => nats_password
+    }
+  end
+
+  config = {
+    'host' => get_host,
+    'message_bus_servers' => message_bus_servers,
+    'routes' => routes.map do |route|
+      r = {
+        'name' => route['name'],
+        'port' => route['port'],
+        'registration_interval' => route['registration_interval'] || '20s',
+        'uris' => route['uris']
+      }
+      r['tags'] = route['tags'] if route['tags']
+      r['server_cert_domain_san'] = route['server_cert_domain_san'] if route['server_cert_domain_san']
+      if route['health_check']
+        r['health_check'] = route['health_check']
+      end
+      r
+    end
+  }
+%>
+<%= JSON.pretty_generate(config) %>

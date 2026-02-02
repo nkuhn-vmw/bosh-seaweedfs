@@ -5,8 +5,19 @@ set -e
 RUN_DIR=/var/vcap/sys/run/seaweedfs-s3
 LOG_DIR=/var/vcap/sys/log/seaweedfs-s3
 CONFIG_DIR=/var/vcap/jobs/seaweedfs-s3/config
+CERTS_DIR=${CONFIG_DIR}/certs
 PIDFILE=${RUN_DIR}/seaweedfs-s3.pid
 WEED=/var/vcap/packages/seaweedfs/weed
+
+<%
+  # Determine filer address from link or property
+  filer_address = p('seaweedfs.s3.filer')
+  if_link('seaweedfs-filer') do |filer_link|
+    filer_instance = filer_link.instances.first
+    filer_port = filer_link.p('seaweedfs.filer.port') rescue 8888
+    filer_address = "#{filer_instance.address}:#{filer_port}"
+  end
+%>
 
 case $1 in
   start)
@@ -20,12 +31,15 @@ case $1 in
     <% if p('seaweedfs.s3.config.enabled') %>
     EXTRA_ARGS="${EXTRA_ARGS} -config=${CONFIG_DIR}/s3.json"
     <% end %>
+    <% if p('seaweedfs.s3.tls.enabled') %>
+    EXTRA_ARGS="${EXTRA_ARGS} -cert=${CERTS_DIR}/tls_cert.pem -key=${CERTS_DIR}/tls_key.pem"
+    <% end %>
 
     exec chpst -u vcap:vcap ${WEED} s3 \
       -ip.bind=<%= p('seaweedfs.s3.ip_bind') %> \
       -port=<%= p('seaweedfs.s3.port') %> \
       -port.grpc=<%= p('seaweedfs.s3.port_grpc') %> \
-      -filer=<%= p('seaweedfs.s3.filer') %> \
+      -filer=<%= filer_address %> \
       -metricsPort=<%= p('seaweedfs.s3.metrics_port') %> \
       -allowEmptyFolder=<%= p('seaweedfs.s3.allow_empty_folder') %> \
       ${EXTRA_ARGS} \

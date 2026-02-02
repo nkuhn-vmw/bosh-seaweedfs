@@ -4,6 +4,13 @@ packages:
   - seaweedfs
 templates:
   ctl.erb: bin/ctl
+
+provides:
+  - name: seaweedfs-master
+    type: seaweedfs-master
+    properties:
+      - seaweedfs.master.port
+
 properties:
   seaweedfs.master.port:
     description: "Port for master server"

@@ -1,0 +1,47 @@
+#!/bin/bash
+
+set -eu
+
+export CF_HOME=$(mktemp -d)
+trap "rm -rf $CF_HOME" EXIT
+
+CF_API="<%= p('cf.api_url') %>"
+CF_USER="<%= p('cf.admin_username') %>"
+CF_PASSWORD="<%= p('cf.admin_password') %>"
+SKIP_SSL="<%= p('cf.skip_ssl_validation') %>"
+
+BROKER_NAME="<%= p('broker.name') %>"
+BROKER_URL="<%= p('broker.url') %>"
+BROKER_USER="<%= p('broker.username') %>"
+BROKER_PASSWORD="<%= p('broker.password') %>"
+ENABLE_ACCESS="<%= p('broker.enable_service_access') %>"
+
+echo "Logging into Cloud Foundry..."
+if [ "$SKIP_SSL" = "true" ]; then
+  cf api "$CF_API" --skip-ssl-validation
+else
+  cf api "$CF_API"
+fi
+
+cf auth "$CF_USER" "$CF_PASSWORD"
+
+echo "Checking if broker '$BROKER_NAME' already exists..."
+if cf service-brokers | grep -q "^${BROKER_NAME}"; then
+  echo "Broker already exists, updating..."
+  cf update-service-broker "$BROKER_NAME" "$BROKER_USER" "$BROKER_PASSWORD" "$BROKER_URL"
+else
+  echo "Creating new broker..."
+  cf create-service-broker "$BROKER_NAME" "$BROKER_USER" "$BROKER_PASSWORD" "$BROKER_URL"
+fi
+
+if [ "$ENABLE_ACCESS" = "true" ]; then
+  echo "Enabling service access for all plans..."
+  # Get all service offerings from this broker and enable access
+  for service in $(cf curl "/v3/service_offerings?service_broker_names=${BROKER_NAME}" | jq -r '.resources[].name'); do
+    echo "Enabling access for service: $service"
+    cf enable-service-access "$service" || true
+  done
+fi
+
+echo "Broker registration complete!"
+cf service-brokers
