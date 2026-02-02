@@ -396,6 +396,11 @@ job_types:
       - name: ephemeral_disk
         type: integer
         default: 4096
+      - name: persistent_disk
+        type: integer
+        default: 0
+        constraints:
+          min: 0
       - name: cpu
         type: integer
         default: 1
@@ -433,6 +438,11 @@ job_types:
       - name: ephemeral_disk
         type: integer
         default: 4096
+      - name: persistent_disk
+        type: integer
+        default: 0
+        constraints:
+          min: 0
       - name: cpu
         type: integer
         default: 1
