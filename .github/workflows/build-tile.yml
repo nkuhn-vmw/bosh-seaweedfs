@@ -108,6 +108,8 @@ jobs:
 
           # Update version in metadata
           sed -i "s/product_version:.*/product_version: \"${TILE_VERSION}\"/" build/tile/metadata/tile.yml
+          sed -i "s/seaweedfs-1.0.0.tgz/seaweedfs-${SEAWEEDFS_RELEASE_VERSION}.tgz/" build/tile/metadata/tile.yml
+          sed -i "s/version: \"1.0.0\"/version: \"${SEAWEEDFS_RELEASE_VERSION}\"/" build/tile/metadata/tile.yml
 
           # Copy releases
           cp build/seaweedfs-${SEAWEEDFS_RELEASE_VERSION}.tgz build/tile/releases/

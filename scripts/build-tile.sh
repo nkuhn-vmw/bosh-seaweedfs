@@ -104,9 +104,11 @@ cp "${TILE_DIR}/metadata/tile.yml" "${TILE_BUILD}/metadata/"
 # Update version in metadata (cross-platform sed)
 if [[ "$OSTYPE" == "darwin"* ]]; then
   sed -i '' "s/product_version:.*/product_version: \"${TILE_VERSION}\"/" "${TILE_BUILD}/metadata/tile.yml"
+  sed -i '' "s/seaweedfs-1.0.0.tgz/seaweedfs-${SEAWEEDFS_RELEASE_VERSION}.tgz/" "${TILE_BUILD}/metadata/tile.yml"
   sed -i '' "s/version: \"1.0.0\"/version: \"${SEAWEEDFS_RELEASE_VERSION}\"/" "${TILE_BUILD}/metadata/tile.yml"
 else
   sed -i "s/product_version:.*/product_version: \"${TILE_VERSION}\"/" "${TILE_BUILD}/metadata/tile.yml"
+  sed -i "s/seaweedfs-1.0.0.tgz/seaweedfs-${SEAWEEDFS_RELEASE_VERSION}.tgz/" "${TILE_BUILD}/metadata/tile.yml"
   sed -i "s/version: \"1.0.0\"/version: \"${SEAWEEDFS_RELEASE_VERSION}\"/" "${TILE_BUILD}/metadata/tile.yml"
 fi
 
