@@ -31,52 +31,65 @@ property_blueprints:
     type: rsa_cert_credentials
   - name: master_count
     type: integer
+    label: Master Node Count
     default: 1
     configurable: true
   - name: volume_count
     type: integer
+    label: Volume Node Count
     default: 3
     configurable: true
   - name: replication
     type: string
+    label: Replication Type
     default: "000"
     configurable: true
   - name: broker_username
     type: string
+    label: Broker Username
     default: "admin"
     configurable: true
   - name: broker_password
     type: secret
+    label: Broker Password
     configurable: true
   - name: s3_admin_access_key
     type: string
+    label: S3 Admin Access Key
     default: "admin"
     configurable: true
   - name: s3_admin_secret_key
     type: secret
+    label: S3 Admin Secret Key
     configurable: true
   - name: s3_route_hostname
     type: string
+    label: S3 Route Hostname
     configurable: true
     optional: true
   - name: broker_route_hostname
     type: string
+    label: Broker Route Hostname
     configurable: true
     optional: true
   - name: enable_tls
     type: boolean
+    label: Enable TLS
     default: false
     configurable: true
   - name: cf_api_url
     type: string
+    label: CF API URL
     configurable: true
     optional: true
   - name: cf_admin_username
     type: string
+    label: CF Admin Username
     default: "admin"
     configurable: true
   - name: cf_admin_password
     type: secret
+    label: CF Admin Password
     configurable: true
     optional: true
 
@@ -105,6 +118,17 @@ form_types:
       - reference: .properties.broker_password
         label: Broker Password
         description: Password for service broker authentication
+
+  - name: seaweedfs_s3_config
+    label: S3 Configuration
+    description: Configure S3 admin credentials
+    property_inputs:
+      - reference: .properties.s3_admin_access_key
+        label: S3 Admin Access Key
+        description: Access key for S3 admin user
+      - reference: .properties.s3_admin_secret_key
+        label: S3 Admin Secret Key
+        description: Secret key for S3 admin user
 
   - name: seaweedfs_networking
     label: Networking
@@ -165,9 +189,6 @@ job_types:
       type: integer
       default: 1
       configurable: true
-    property_blueprints:
-      - name: vm_credentials
-        type: salted_credentials
     manifest: |
       seaweedfs:
         master:
@@ -204,9 +225,6 @@ job_types:
       type: integer
       default: 3
       configurable: true
-    property_blueprints:
-      - name: vm_credentials
-        type: salted_credentials
     manifest: |
       seaweedfs:
         volume:
@@ -243,9 +261,6 @@ job_types:
       type: integer
       default: 1
       configurable: true
-    property_blueprints:
-      - name: vm_credentials
-        type: salted_credentials
     manifest: |
       seaweedfs:
         filer:
@@ -287,9 +302,6 @@ job_types:
       type: integer
       default: 1
       configurable: true
-    property_blueprints:
-      - name: vm_credentials
-        type: salted_credentials
     manifest: |
       seaweedfs:
         s3:
@@ -352,9 +364,6 @@ job_types:
       type: integer
       default: 1
       configurable: true
-    property_blueprints:
-      - name: vm_credentials
-        type: salted_credentials
     manifest: |
       seaweedfs:
         broker:
@@ -411,9 +420,6 @@ job_types:
       name: instances
       type: integer
       default: 1
-    property_blueprints:
-      - name: vm_credentials
-        type: salted_credentials
     manifest: |
       cf:
         api_url: (( .properties.cf_api_url.value ))
@@ -453,9 +459,6 @@ job_types:
       name: instances
       type: integer
       default: 1
-    property_blueprints:
-      - name: vm_credentials
-        type: salted_credentials
     manifest: |
       cf:
         api_url: (( .properties.cf_api_url.value ))
