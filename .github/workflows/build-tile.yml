@@ -78,6 +78,7 @@ jobs:
 
       - name: Create BOSH release
         run: |
+          mkdir -p build
           bosh create-release --force --version="${SEAWEEDFS_RELEASE_VERSION}" \
             --tarball="build/seaweedfs-${SEAWEEDFS_RELEASE_VERSION}.tgz"
 
