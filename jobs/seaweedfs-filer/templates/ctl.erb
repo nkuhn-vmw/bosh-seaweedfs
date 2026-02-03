@@ -9,6 +9,17 @@ CONFIG_DIR=/var/vcap/jobs/seaweedfs-filer/config
 PIDFILE=${RUN_DIR}/seaweedfs-filer.pid
 WEED=/var/vcap/packages/seaweedfs/weed
 
+<%
+  # Determine master address from link or property
+  master_address = p('seaweedfs.filer.master')
+  if_link('seaweedfs-master') do |master_link|
+    master_port = master_link.p('seaweedfs.master.port') rescue 9333
+    # Build comma-separated list of all master addresses for HA support
+    master_addresses = master_link.instances.map { |instance| "#{instance.address}:#{master_port}" }
+    master_address = master_addresses.join(',')
+  end
+%>
+
 case $1 in
   start)
     mkdir -p ${RUN_DIR} ${LOG_DIR} ${DATA_DIR}
@@ -19,11 +30,21 @@ case $1 in
     EXTRA_ARGS="${EXTRA_ARGS} -defaultReplicaPlacement=<%= p('seaweedfs.filer.default_replication') %>"
     <% end %>
 
+    # Create the leveldb directory
+    mkdir -p ${DATA_DIR}/filerldb2
+    chown -R vcap:vcap ${DATA_DIR}/filerldb2
+
+    # SeaweedFS looks for filer.toml in /etc/seaweedfs/
+    # Use a symlink to the BOSH job config directory (preferred over copying)
+    mkdir -p /etc/seaweedfs
+    ln -sf ${CONFIG_DIR}/filer.toml /etc/seaweedfs/filer.toml
+
     exec chpst -u vcap:vcap ${WEED} filer \
+      -ip=<%= spec.ip %> \
       -ip.bind=<%= p('seaweedfs.filer.ip_bind') %> \
       -port=<%= p('seaweedfs.filer.port') %> \
       -port.grpc=<%= p('seaweedfs.filer.port_grpc') %> \
-      -master=<%= p('seaweedfs.filer.master') %> \
+      -master=<%= master_address %> \
       -metricsPort=<%= p('seaweedfs.filer.metrics_port') %> \
       -maxMB=<%= p('seaweedfs.filer.max_mb') %> \
       -dirListLimit=<%= p('seaweedfs.filer.dir_list_limit') %> \

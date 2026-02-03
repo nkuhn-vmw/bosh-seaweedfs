@@ -1,0 +1,14 @@
+#!/bin/bash
+
+set -e -x
+
+mkdir -p ${BOSH_INSTALL_TARGET}/bin
+
+# Extract cf CLI - files are at tarball root (cf, cf8, LICENSE, NOTICE)
+tar -xzf cf-cli/cf8-cli-8.8.2-linux64.tgz -C ${BOSH_INSTALL_TARGET}/bin cf cf8
+
+chmod +x ${BOSH_INSTALL_TARGET}/bin/cf
+chmod +x ${BOSH_INSTALL_TARGET}/bin/cf8
+
+# Verify installation
+ls -la ${BOSH_INSTALL_TARGET}/bin/

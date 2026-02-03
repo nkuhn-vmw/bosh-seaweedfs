@@ -69,56 +69,11 @@ properties:
     description: "Service description for the broker catalog"
     default: "SeaweedFS distributed object storage with S3-compatible API"
 
-  seaweedfs.broker.catalog.plans:
-    description: |
-      List of service plans. Each plan should have:
-        - id: unique plan ID
-        - name: plan name
-        - description: plan description
-        - free: whether the plan is free (boolean)
-        - plan_type: "shared" or "dedicated"
-        - dedicated_config: (for dedicated plans)
-            - vm_type: BOSH VM type
-            - disk_type: BOSH persistent disk type
-            - master_nodes: number of master nodes
-            - volume_nodes: number of volume nodes
-            - filer_nodes: number of filer nodes
-            - network: BOSH network name
-            - azs: list of availability zones
-    default:
-      - id: "shared-bucket"
-        name: "shared"
-        description: "Shared SeaweedFS cluster with dedicated bucket"
-        free: true
-        plan_type: "shared"
-      - id: "dedicated-small"
-        name: "dedicated-small"
-        description: "Small dedicated SeaweedFS cluster (1 master, 3 volumes, 1 filer)"
-        free: false
-        plan_type: "dedicated"
-        dedicated_config:
-          vm_type: "small"
-          disk_type: "10GB"
-          master_nodes: 1
-          volume_nodes: 3
-          filer_nodes: 1
-          network: "default"
-          azs: ["z1", "z2", "z3"]
-      - id: "dedicated-large"
-        name: "dedicated-large"
-        description: "Large dedicated SeaweedFS cluster (3 masters, 6 volumes, 2 filers)"
-        free: false
-        plan_type: "dedicated"
-        dedicated_config:
-          vm_type: "large"
-          disk_type: "100GB"
-          master_nodes: 3
-          volume_nodes: 6
-          filer_nodes: 2
-          network: "default"
-          azs: ["z1", "z2", "z3"]
-
   # Shared cluster configuration
+  seaweedfs.broker.shared_cluster.enabled:
+    description: "Whether the shared cluster plan is enabled"
+    default: true
+
   seaweedfs.broker.shared_cluster.s3_endpoint:
     description: "S3 endpoint of the shared SeaweedFS cluster"
     default: ""
@@ -136,30 +91,62 @@ properties:
     default: ""
 
   seaweedfs.broker.shared_cluster.use_ssl:
-    description: "Use SSL for shared cluster connections"
-    default: false
+    description: "Use SSL/TLS for S3 connections (via gorouter)"
+    default: true
 
   seaweedfs.broker.shared_cluster.region:
     description: "S3 region for the shared cluster"
     default: "us-east-1"
 
-  # BOSH configuration for on-demand instances
-  seaweedfs.broker.bosh.director_url:
-    description: "BOSH Director URL"
+  # BOSH configuration for on-demand instances (ODB-style structure)
+  seaweedfs.broker.bosh.url:
+    description: "BOSH Director URL (e.g., https://director:25555)"
     default: ""
 
-  seaweedfs.broker.bosh.director_ca_cert:
-    description: "BOSH Director CA certificate"
+  seaweedfs.broker.bosh.root_ca_cert:
+    description: "BOSH Director root CA certificate"
     default: ""
 
-  seaweedfs.broker.bosh.client_id:
+  seaweedfs.broker.bosh.authentication.uaa.url:
+    description: "UAA URL for BOSH authentication (e.g., https://director:8443)"
+    default: ""
+
+  seaweedfs.broker.bosh.authentication.uaa.client_id:
     description: "UAA client ID for BOSH access"
     default: ""
 
-  seaweedfs.broker.bosh.client_secret:
+  seaweedfs.broker.bosh.authentication.uaa.client_secret:
     description: "UAA client secret for BOSH access"
     default: ""
 
+  # On-demand deployment configuration
+  seaweedfs.broker.on_demand.service_name:
+    description: "Service name for on-demand deployments"
+    default: "seaweedfs"
+
+  seaweedfs.broker.on_demand.plans:
+    description: |
+      Array of on-demand plans configured via Ops Manager service_plan_forms.
+      Each plan contains: name, guid, plan_description, deployment_type, vm_type, disk_type, storage_quota_gb
+    default: []
+
+  seaweedfs.broker.on_demand.stemcell_os:
+    description: "Stemcell OS for on-demand deployments"
+    default: "ubuntu-jammy"
+
+  seaweedfs.broker.on_demand.stemcell_version:
+    description: "Stemcell version for on-demand deployments"
+    default: "latest"
+
+  seaweedfs.broker.on_demand.network:
+    description: "Network for on-demand deployments"
+    default: "default"
+
+  seaweedfs.broker.on_demand.azs:
+    description: "Availability zones for on-demand deployments (array). Uses the AZs assigned to the tile in Ops Manager."
+    default: ["z1", "z2", "z3"]
+
+  # Legacy properties for backwards compatibility
   seaweedfs.broker.bosh.deployment_prefix:
     description: "Prefix for on-demand deployment names"
     default: "seaweedfs-ondemand"
@@ -170,14 +157,6 @@ properties:
 
   seaweedfs.broker.bosh.release_version:
     description: "SeaweedFS BOSH release version"
-    default: "latest"
-
-  seaweedfs.broker.bosh.stemcell_os:
-    description: "Stemcell OS for on-demand deployments"
-    default: "ubuntu-jammy"
-
-  seaweedfs.broker.bosh.stemcell_version:
-    description: "Stemcell version for on-demand deployments"
     default: "latest"
 
   # Route registrar configuration (for Cloud Foundry integration)

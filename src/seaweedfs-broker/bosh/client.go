@@ -112,9 +112,9 @@ func NewClient(cfg *config.BOSHConfig) (*Client, error) {
 		MinVersion: tls.VersionTLS12,
 	}
 
-	if cfg.DirectorCACert != "" {
+	if cfg.RootCACert != "" {
 		caCertPool := x509.NewCertPool()
-		if !caCertPool.AppendCertsFromPEM([]byte(cfg.DirectorCACert)) {
+		if !caCertPool.AppendCertsFromPEM([]byte(cfg.RootCACert)) {
 			return nil, fmt.Errorf("failed to parse BOSH director CA cert")
 		}
 		tlsConfig.RootCAs = caCertPool
@@ -130,10 +130,10 @@ func NewClient(cfg *config.BOSHConfig) (*Client, error) {
 	}
 
 	return &Client{
-		directorURL:  strings.TrimSuffix(cfg.DirectorURL, "/"),
+		directorURL:  strings.TrimSuffix(cfg.URL, "/"),
 		httpClient:   httpClient,
-		clientID:     cfg.ClientID,
-		clientSecret: cfg.ClientSecret,
+		clientID:     cfg.Authentication.UAA.ClientID,
+		clientSecret: cfg.Authentication.UAA.ClientSecret,
 	}, nil
 }
 

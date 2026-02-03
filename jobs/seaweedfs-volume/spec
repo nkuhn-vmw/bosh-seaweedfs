@@ -4,6 +4,12 @@ packages:
   - seaweedfs
 templates:
   ctl.erb: bin/ctl
+
+consumes:
+  - name: seaweedfs-master
+    type: seaweedfs-master
+    optional: true
+
 properties:
   seaweedfs.volume.port:
     description: "Port for volume server"

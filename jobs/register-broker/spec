@@ -4,7 +4,12 @@ name: register-broker
 templates:
   run.erb: bin/run
 
-packages: []
+packages:
+  - cf-cli
+
+consumes:
+  - name: seaweedfs-broker
+    type: seaweedfs-broker
 
 properties:
   cf.api_url:
@@ -22,7 +27,8 @@ properties:
     description: "Name to register the broker as"
     default: "seaweedfs"
   broker.url:
-    description: "URL of the service broker"
+    description: "URL of the service broker (optional - derived from link if not provided)"
+    default: ""
   broker.username:
     description: "Service broker username"
   broker.password:

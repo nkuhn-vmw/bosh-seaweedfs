@@ -2,6 +2,8 @@
 
 set -eu
 
+export PATH="/var/vcap/packages/cf-cli/bin:$PATH"
+
 export CF_HOME=$(mktemp -d)
 trap "rm -rf $CF_HOME" EXIT
 
@@ -23,12 +25,8 @@ cf auth "$CF_USER" "$CF_PASSWORD"
 
 echo "Checking if broker '$BROKER_NAME' exists..."
 if cf service-brokers | grep -q "^${BROKER_NAME}"; then
-  echo "Disabling service access for all plans..."
-  # Get all service offerings from this broker and disable access
-  for service in $(cf curl "/v3/service_offerings?service_broker_names=${BROKER_NAME}" | jq -r '.resources[].name' 2>/dev/null || true); do
-    echo "Disabling access for service: $service"
-    cf disable-service-access "$service" || true
-  done
+  echo "Disabling service access for seaweedfs service..."
+  cf disable-service-access seaweedfs || true
 
   echo "Deleting broker '$BROKER_NAME'..."
   cf delete-service-broker "$BROKER_NAME" -f

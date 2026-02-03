@@ -2,6 +2,8 @@
 
 set -eu
 
+export PATH="/var/vcap/packages/cf-cli/bin:$PATH"
+
 export CF_HOME=$(mktemp -d)
 trap "rm -rf $CF_HOME" EXIT
 
@@ -11,7 +13,17 @@ CF_PASSWORD="<%= p('cf.admin_password') %>"
 SKIP_SSL="<%= p('cf.skip_ssl_validation') %>"
 
 BROKER_NAME="<%= p('broker.name') %>"
-BROKER_URL="<%= p('broker.url') %>"
+<%
+  # Get broker URL from link or property
+  broker_url = p('broker.url', '')
+  if broker_url.empty?
+    broker_link = link('seaweedfs-broker')
+    broker_instance = broker_link.instances.first
+    broker_port = broker_link.p('seaweedfs.broker.port')
+    broker_url = "http://#{broker_instance.address}:#{broker_port}"
+  end
+%>
+BROKER_URL="<%= broker_url %>"
 BROKER_USER="<%= p('broker.username') %>"
 BROKER_PASSWORD="<%= p('broker.password') %>"
 ENABLE_ACCESS="<%= p('broker.enable_service_access') %>"
@@ -35,12 +47,8 @@ else
 fi
 
 if [ "$ENABLE_ACCESS" = "true" ]; then
-  echo "Enabling service access for all plans..."
-  # Get all service offerings from this broker and enable access
-  for service in $(cf curl "/v3/service_offerings?service_broker_names=${BROKER_NAME}" | jq -r '.resources[].name'); do
-    echo "Enabling access for service: $service"
-    cf enable-service-access "$service" || true
-  done
+  echo "Enabling service access for seaweedfs service..."
+  cf enable-service-access seaweedfs || true
 fi
 
 echo "Broker registration complete!"

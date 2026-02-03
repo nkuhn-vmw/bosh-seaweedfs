@@ -19,6 +19,7 @@ case $1 in
     <% end %>
 
     exec chpst -u vcap:vcap ${WEED} master \
+      -ip=<%= spec.ip %> \
       -ip.bind=<%= p('seaweedfs.master.ip_bind') %> \
       -port=<%= p('seaweedfs.master.port') %> \
       -port.grpc=<%= p('seaweedfs.master.port_grpc') %> \

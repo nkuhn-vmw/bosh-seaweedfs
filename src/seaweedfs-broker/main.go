@@ -32,7 +32,7 @@ func main() {
 		addr = ":8080"
 	}
 
-	log.Printf("SeaweedFS Service Broker starting on %s", addr)
+	log.Printf("SeaweedFS Service Broker starting on %s (config schema: %s)", addr, config.ConfigVersion)
 	log.Printf("Catalog: %d services available", len(cfg.Catalog.Services))
 
 	server := &http.Server{

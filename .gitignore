@@ -1,12 +1,2 @@
-# BOSH release artifacts
-.dev_builds/
-dev_releases/
-releases/
-.final_builds/
-blobs/
-
-# Local settings
-.claude/
-
-# OS files
-.DS_Store
+product/
+release/

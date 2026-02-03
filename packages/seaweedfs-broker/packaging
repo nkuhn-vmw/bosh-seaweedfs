@@ -1,12 +1,15 @@
 #!/bin/bash
+# Force rebuild: v3 - ConfigVersion 2.0.0-nested-structs
 
 set -e -x
 
 export GOROOT=$(readlink -nf /var/vcap/packages/golang-1.21)
 export GOPATH=${BOSH_INSTALL_TARGET}
+export GOCACHE=${BOSH_INSTALL_TARGET}/.cache
 export PATH=${GOROOT}/bin:${PATH}
 
 mkdir -p ${BOSH_INSTALL_TARGET}/bin
+mkdir -p ${GOCACHE}
 mkdir -p ${BOSH_INSTALL_TARGET}/src
 
 # Extract broker source from tarball
@@ -24,5 +27,6 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
   -o ${BOSH_INSTALL_TARGET}/bin/seaweedfs-broker \
   .
 
-# Clean up source after build
+# Clean up source and cache after build
 rm -rf ${BOSH_INSTALL_TARGET}/src
+rm -rf ${BOSH_INSTALL_TARGET}/.cache

@@ -8,6 +8,17 @@ DATA_DIR=/var/vcap/store/seaweedfs-volume
 PIDFILE=${RUN_DIR}/seaweedfs-volume.pid
 WEED=/var/vcap/packages/seaweedfs/weed
 
+<%
+  # Determine master address from link or property
+  master_address = p('seaweedfs.volume.master')
+  if_link('seaweedfs-master') do |master_link|
+    master_port = master_link.p('seaweedfs.master.port') rescue 9333
+    # Build comma-separated list of all master addresses for HA support
+    master_addresses = master_link.instances.map { |instance| "#{instance.address}:#{master_port}" }
+    master_address = master_addresses.join(',')
+  end
+%>
+
 case $1 in
   start)
     mkdir -p ${RUN_DIR} ${LOG_DIR} ${DATA_DIR}
@@ -28,10 +39,11 @@ case $1 in
     <% end %>
 
     exec chpst -u vcap:vcap ${WEED} volume \
+      -ip=<%= spec.ip %> \
       -ip.bind=<%= p('seaweedfs.volume.ip_bind') %> \
       -port=<%= p('seaweedfs.volume.port') %> \
       -port.grpc=<%= p('seaweedfs.volume.port_grpc') %> \
-      -mserver=<%= p('seaweedfs.volume.master') %> \
+      -mserver=<%= master_address %> \
       -dir=${DATA_DIR} \
       -max=<%= p('seaweedfs.volume.max_volumes') %> \
       -metricsPort=<%= p('seaweedfs.volume.metrics_port') %> \

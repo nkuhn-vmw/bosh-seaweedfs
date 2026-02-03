@@ -1,14 +1,87 @@
 <%
+  require 'json'
+  require 'securerandom'
+
   broker = p('seaweedfs.broker')
 
   # Handle shared cluster endpoint from link or property
   shared_s3_endpoint = p('seaweedfs.broker.shared_cluster.s3_endpoint')
+  shared_cluster_enabled = p('seaweedfs.broker.shared_cluster.enabled')
   if_link('seaweedfs-s3') do |s3_link|
-    if shared_s3_endpoint.empty?
+    if shared_s3_endpoint.empty? && shared_cluster_enabled
       s3_instance = s3_link.instances.first
       shared_s3_endpoint = "#{s3_instance.address}:#{s3_link.p('seaweedfs.s3.port')}"
     end
   end
+
+  # Parse on-demand plans from tile service_plan_forms
+  on_demand_plans_raw = p('seaweedfs.broker.on_demand.plans')
+  on_demand_network = p('seaweedfs.broker.on_demand.network')
+  on_demand_azs = p('seaweedfs.broker.on_demand.azs')
+
+  # Handle azs - could be array or comma-separated string
+  if on_demand_azs.is_a?(String)
+    on_demand_azs = on_demand_azs.split(',').map(&:strip)
+  end
+
+  on_demand_plans = []
+  if on_demand_plans_raw.is_a?(Array) && !on_demand_plans_raw.empty?
+    on_demand_plans = on_demand_plans_raw.map do |plan|
+      # Generate a stable plan ID from the plan GUID if provided
+      plan_id = plan['guid'] || "ondemand-#{SecureRandom.uuid}"
+      plan_name = plan['name'] || "ondemand-#{plan_id[0..7]}"
+
+      # Map deployment_type to node counts
+      deployment_type = plan['deployment_type'] || 'single_node'
+      if deployment_type == 'ha'
+        master_nodes = 3
+        volume_nodes = 6
+        filer_nodes = 3
+        replication = '010'  # Different rack for HA
+      else
+        # single_node deployment
+        master_nodes = 1
+        volume_nodes = 1
+        filer_nodes = 1
+        replication = '000'  # No replication for single node
+      end
+
+      {
+        'id' => plan_id,
+        'name' => plan_name,
+        'description' => plan['plan_description'] || "On-demand SeaweedFS cluster (#{deployment_type == 'ha' ? 'HA' : 'Single Node'})",
+        'free' => false,
+        'plan_type' => 'dedicated',
+        'deployment_type' => deployment_type,
+        'storage_quota_gb' => plan['storage_quota_gb'] || 100,
+        'dedicated_config' => {
+          'vm_type' => plan['vm_type'] || 'medium',
+          'disk_type' => plan['disk_type'] || '50GB',
+          'master_nodes' => master_nodes,
+          'volume_nodes' => volume_nodes,
+          'filer_nodes' => filer_nodes,
+          'replication' => replication,
+          'network' => on_demand_network,
+          'azs' => on_demand_azs
+        }
+      }
+    end
+  end
+
+  # Build static plans list - only include shared if enabled
+  static_plans = []
+  if shared_cluster_enabled
+    static_plans << {
+      'id' => 'shared-bucket',
+      'name' => 'shared',
+      'description' => 'Shared SeaweedFS cluster with dedicated bucket',
+      'free' => true,
+      'plan_type' => 'shared'
+    }
+  end
+
+  # Merge static plans with on-demand plans
+  all_plans = static_plans + on_demand_plans
 %>
 ---
 listen_addr: ":<%= p('seaweedfs.broker.port') %>"
@@ -44,7 +117,7 @@ catalog:
         documentationUrl: "https://github.com/seaweedfs/seaweedfs/wiki"
         supportUrl: "https://github.com/seaweedfs/seaweedfs/issues"
       plans:
-<% p('seaweedfs.broker.catalog.plans').each do |plan| %>
+<% all_plans.each do |plan| %>
         - id: "<%= plan['id'] %>"
           name: "<%= plan['name'] %>"
           description: "<%= plan['description'] %>"
@@ -69,6 +142,7 @@ catalog:
             master_nodes: <%= plan['dedicated_config']['master_nodes'] %>
             volume_nodes: <%= plan['dedicated_config']['volume_nodes'] %>
             filer_nodes: <%= plan['dedicated_config']['filer_nodes'] %>
+            replication: "<%= plan['dedicated_config']['replication'] || '001' %>"
             network: "<%= plan['dedicated_config']['network'] %>"
             azs:
 <% plan['dedicated_config']['azs'].each do |az| %>
@@ -78,6 +152,7 @@ catalog:
 <% end %>
 
 shared_cluster:
+  enabled: <%= shared_cluster_enabled %>
   s3_endpoint: "<%= shared_s3_endpoint %>"
   filer_endpoint: "<%= p('seaweedfs.broker.shared_cluster.filer_endpoint') %>"
   access_key: "<%= p('seaweedfs.broker.shared_cluster.access_key') %>"
@@ -86,18 +161,22 @@ shared_cluster:
   region: "<%= p('seaweedfs.broker.shared_cluster.region') %>"
 
 bosh:
-  director_url: "<%= p('seaweedfs.broker.bosh.director_url') %>"
-<% if !p('seaweedfs.broker.bosh.director_ca_cert').empty? %>
-  director_ca_cert: |
-<%= p('seaweedfs.broker.bosh.director_ca_cert').gsub(/^/, '    ') %>
+  url: "<%= p('seaweedfs.broker.bosh.url') %>"
+<% bosh_ca_cert = p('seaweedfs.broker.bosh.root_ca_cert') %>
+<% if !bosh_ca_cert.to_s.empty? %>
+  root_ca_cert: |
+<%= bosh_ca_cert.gsub(/^/, '    ') %>
 <% end %>
-  client_id: "<%= p('seaweedfs.broker.bosh.client_id') %>"
-  client_secret: "<%= p('seaweedfs.broker.bosh.client_secret') %>"
+  authentication:
+    uaa:
+      url: "<%= p('seaweedfs.broker.bosh.authentication.uaa.url') %>"
+      client_id: "<%= p('seaweedfs.broker.bosh.authentication.uaa.client_id') %>"
+      client_secret: "<%= p('seaweedfs.broker.bosh.authentication.uaa.client_secret') %>"
   deployment_prefix: "<%= p('seaweedfs.broker.bosh.deployment_prefix') %>"
   release_name: "<%= p('seaweedfs.broker.bosh.release_name') %>"
   release_version: "<%= p('seaweedfs.broker.bosh.release_version') %>"
-  stemcell_os: "<%= p('seaweedfs.broker.bosh.stemcell_os') %>"
-  stemcell_version: "<%= p('seaweedfs.broker.bosh.stemcell_version') %>"
+  stemcell_os: "<%= p('seaweedfs.broker.on_demand.stemcell_os') %>"
+  stemcell_version: "<%= p('seaweedfs.broker.on_demand.stemcell_version') %>"
 
 state_store:
   type: "file"

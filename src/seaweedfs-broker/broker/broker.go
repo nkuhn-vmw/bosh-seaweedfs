@@ -51,7 +51,7 @@ func New(cfg *config.Config) (*Broker, error) {
 	}
 
 	// Initialize BOSH client if configured
-	if cfg.BOSH.DirectorURL != "" {
+	if cfg.BOSH.URL != "" {
 		boshClient, err := bosh.NewClient(&cfg.BOSH)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create BOSH client: %w", err)
@@ -511,28 +511,32 @@ func (b *Broker) buildCatalog() map[string]any {
 				"description": plan.Description,
 				"free":        plan.Free,
 				"bindable":    true,
-			}
-			if plan.Metadata != nil {
-				planData["metadata"] = plan.Metadata
+				"metadata": map[string]any{
+					"displayName": plan.Metadata.DisplayName,
+					"bullets":     plan.Metadata.Bullets,
+				},
 			}
 			plans = append(plans, planData)
 		}
 
 		serviceData := map[string]any{
-			"id":                   svc.ID,
-			"name":                 svc.Name,
-			"description":          svc.Description,
-			"bindable":             svc.Bindable,
+			"id":                    svc.ID,
+			"name":                  svc.Name,
+			"description":           svc.Description,
+			"bindable":              svc.Bindable,
 			"instances_retrievable": true,
 			"bindings_retrievable":  true,
 			"plan_updateable":       false,
 			"plans":                 plans,
-		}
-		if svc.Tags != nil {
-			serviceData["tags"] = svc.Tags
-		}
-		if svc.Metadata != nil {
-			serviceData["metadata"] = svc.Metadata
+			"tags":                  svc.Tags,
+			"metadata": map[string]any{
+				"displayName":         svc.Metadata.DisplayName,
+				"imageUrl":            svc.Metadata.ImageURL,
+				"longDescription":     svc.Metadata.LongDescription,
+				"providerDisplayName": svc.Metadata.ProviderDisplayName,
+				"documentationUrl":    svc.Metadata.DocumentationURL,
+				"supportUrl":          svc.Metadata.SupportURL,
+			},
 		}
 
 		services = append(services, serviceData)
@@ -776,9 +780,13 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 			MasterNodes: 1,
 			VolumeNodes: 3,
 			FilerNodes:  1,
+			Replication: "001",
 			Network:     "default",
 			AZs:         []string{"z1"},
 		}
+	}
+	if cfg.Replication == "" {
+		cfg.Replication = "001"
 	}
 
 	manifest := fmt.Sprintf(`---
@@ -815,7 +823,7 @@ instance_groups:
       seaweedfs:
         master:
           port: 9333
-          default_replication: "001"
+          default_replication: "%s"
 
 - name: seaweedfs-volume
   instances: %d
@@ -891,6 +899,7 @@ variables:
 		cfg.Network,
 		cfg.DiskType,
 		b.config.BOSH.ReleaseName,
+		cfg.Replication,
 		cfg.VolumeNodes,
 		cfg.VMType,
 		toYAMLArray(cfg.AZs),
