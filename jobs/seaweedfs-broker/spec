@@ -69,6 +69,13 @@ properties:
     description: "Service description for the broker catalog"
     default: "SeaweedFS distributed object storage with S3-compatible API"
 
+  seaweedfs.broker.catalog.icon_base64:
+    description: |
+      Base64-encoded PNG icon for the service catalog. This is used as a data URI
+      in the imageUrl field, making the icon available in air-gapped environments.
+      If empty, the external SeaweedFS logo URL will be used as fallback.
+    default: ""
+
   # Shared cluster configuration
   seaweedfs.broker.shared_cluster.enabled:
     description: "Whether the shared cluster plan is enabled"
@@ -92,6 +99,10 @@ properties:
 
   seaweedfs.broker.shared_cluster.use_ssl:
     description: "Use SSL/TLS for S3 connections (via gorouter)"
+    default: true
+
+  seaweedfs.broker.shared_cluster.use_dns:
+    description: "Use BOSH DNS names instead of IP addresses for service bindings"
     default: true
 
   seaweedfs.broker.shared_cluster.region:
@@ -145,6 +156,15 @@ properties:
   seaweedfs.broker.on_demand.azs:
     description: "Availability zones for on-demand deployments (array). Uses the AZs assigned to the tile in Ops Manager."
     default: ["z1", "z2", "z3"]
+
+  # Cloud Foundry integration configuration
+  seaweedfs.broker.cf.system_domain:
+    description: "Cloud Foundry system domain for constructing console URLs"
+    default: ""
+
+  seaweedfs.broker.cf.apps_domain:
+    description: "Cloud Foundry apps domain for on-demand console routes"
+    default: ""
 
   # Legacy properties for backwards compatibility
   seaweedfs.broker.bosh.deployment_prefix:

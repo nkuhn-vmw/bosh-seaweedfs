@@ -493,8 +493,14 @@ func (b *Broker) findPlan(serviceID, planID string) *config.PlanConfig {
 
 func (b *Broker) getDashboardURL(instance *store.ServiceInstance) string {
 	// Return appropriate dashboard URL based on instance type
+	if instance.DeploymentName != "" && instance.ConsoleURL != "" {
+		return instance.ConsoleURL
+	}
 	if instance.DeploymentName != "" {
-		return fmt.Sprintf("https://seaweedfs-%s.example.com", instance.ID[:8])
+		// Generate console URL if CF domain is configured
+		if b.config.CF.SystemDomain != "" {
+			return fmt.Sprintf("https://seaweedfs-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+		}
 	}
 	return ""
 }
@@ -563,19 +569,32 @@ func (b *Broker) buildCredentials(instance *store.ServiceInstance, binding *stor
 		useSSL = b.config.SharedCluster.UseSSL
 	}
 
-	credentials := map[string]any{
-		"credentials": map[string]any{
-			"endpoint":    endpoint,
-			"bucket":      bucket,
-			"access_key":  binding.AccessKey,
-			"secret_key":  binding.SecretKey,
-			"region":      b.config.SharedCluster.Region,
-			"use_ssl":     useSSL,
-			"uri":         fmt.Sprintf("s3://%s:%s@%s/%s", binding.AccessKey, binding.SecretKey, endpoint, bucket),
-		},
+	// Construct endpoint URL with appropriate protocol
+	protocol := "http"
+	if useSSL {
+		protocol = "https"
+	}
+	endpointURL := fmt.Sprintf("%s://%s", protocol, endpoint)
+
+	creds := map[string]any{
+		"endpoint":     endpoint,
+		"endpoint_url": endpointURL,
+		"bucket":       bucket,
+		"access_key":   binding.AccessKey,
+		"secret_key":   binding.SecretKey,
+		"region":       b.config.SharedCluster.Region,
+		"use_ssl":      useSSL,
+		"uri":          fmt.Sprintf("s3://%s:%s@%s/%s", binding.AccessKey, binding.SecretKey, endpoint, bucket),
 	}
 
-	return credentials
+	// Include console URL for dedicated clusters
+	if instance.DeploymentName != "" && instance.ConsoleURL != "" {
+		creds["console_url"] = instance.ConsoleURL
+	}
+
+	return map[string]any{
+		"credentials": creds,
+	}
 }
 
 func generateAccessKey() string {
@@ -726,7 +745,11 @@ func (b *Broker) provisionDedicatedCluster(instance *store.ServiceInstance, plan
 	} else {
 		for _, vm := range vms {
 			if job, ok := vm["job"].(string); ok && job == "seaweedfs-s3" {
-				if ips, ok := vm["ips"].([]any); ok && len(ips) > 0 {
+				// Prefer DNS name over IP address for stable addressing
+				if dns, ok := vm["dns"].([]any); ok && len(dns) > 0 {
+					instance.S3Endpoint = fmt.Sprintf("%v:8333", dns[0])
+				} else if ips, ok := vm["ips"].([]any); ok && len(ips) > 0 {
+					// Fall back to IP if DNS not available
 					instance.S3Endpoint = fmt.Sprintf("%v:8333", ips[0])
 				}
 			}
@@ -737,6 +760,11 @@ func (b *Broker) provisionDedicatedCluster(instance *store.ServiceInstance, plan
 	instance.AdminAccessKey = generateAccessKey()
 	instance.AdminSecretKey = generateSecretKey()
 	instance.BucketName = "default"
+
+	// Generate console URL for dedicated cluster
+	if b.config.CF.SystemDomain != "" {
+		instance.ConsoleURL = fmt.Sprintf("https://seaweedfs-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+	}
 
 	instance.State = "succeeded"
 	instance.StateMessage = "Deployment complete"
@@ -789,12 +817,40 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 		cfg.Replication = "001"
 	}
 
+	// Generate console route hostname
+	consoleHostname := ""
+	routeRegistrarSection := ""
+	additionalReleases := ""
+	if b.config.CF.SystemDomain != "" {
+		consoleHostname = fmt.Sprintf("seaweedfs-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+		// Note: Route registration for on-demand instances requires network access to NATS
+		// and the routing release to be uploaded to the BOSH director.
+		// The nats-tls link must be available from the TAS deployment.
+		additionalReleases = `- name: routing
+  version: latest`
+		routeRegistrarSection = fmt.Sprintf(`  - name: route_registrar
+    release: routing
+    consumes:
+      nats-tls:
+        from: nats-tls
+        deployment: cf
+    properties:
+      route_registrar:
+        routes:
+        - name: seaweedfs-master-console
+          port: 9333
+          registration_interval: 20s
+          uris:
+          - %s`, consoleHostname)
+	}
+
 	manifest := fmt.Sprintf(`---
 name: %s
 
 releases:
 - name: %s
   version: "%s"
+%s
 
 stemcells:
 - alias: default
@@ -824,6 +880,7 @@ instance_groups:
         master:
           port: 9333
           default_replication: "%s"
+%s
 
 - name: seaweedfs-volume
   instances: %d
@@ -891,6 +948,7 @@ variables:
 		instance.DeploymentName,
 		b.config.BOSH.ReleaseName,
 		b.config.BOSH.ReleaseVersion,
+		additionalReleases,
 		b.config.BOSH.StemcellOS,
 		b.config.BOSH.StemcellVersion,
 		cfg.MasterNodes,
@@ -900,6 +958,7 @@ variables:
 		cfg.DiskType,
 		b.config.BOSH.ReleaseName,
 		cfg.Replication,
+		routeRegistrarSection,
 		cfg.VolumeNodes,
 		cfg.VMType,
 		toYAMLArray(cfg.AZs),

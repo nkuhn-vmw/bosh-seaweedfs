@@ -80,6 +80,12 @@ packages:
         templates:
           - name: seaweedfs-master
             release: seaweedfs
+          - name: route_registrar
+            release: routing
+            consumes:
+              nats-tls:
+                from: nats-tls
+                deployment: (( ..cf.deployment_name ))
           - name: bpm
             release: bpm
         memory: 1024
@@ -91,6 +97,13 @@ packages:
         dynamic_ip: 1
         max_in_flight: 1
         properties:
+          route_registrar:
+            routes:
+              - name: seaweedfs-master
+                port: 9333
+                registration_interval: 20s
+                uris:
+                  - (( .properties.master_console_route_name.value )).(( ..cf.cloud_controller.system_domain.value ))
           seaweedfs:
             master:
               port: 9333
@@ -119,6 +132,12 @@ packages:
         templates:
           - name: seaweedfs-filer
             release: seaweedfs
+          - name: route_registrar
+            release: routing
+            consumes:
+              nats-tls:
+                from: nats-tls
+                deployment: (( ..cf.deployment_name ))
           - name: bpm
             release: bpm
         memory: 2048
@@ -130,6 +149,13 @@ packages:
         dynamic_ip: 1
         max_in_flight: 1
         properties:
+          route_registrar:
+            routes:
+              - name: seaweedfs-filer
+                port: 8888
+                registration_interval: 20s
+                uris:
+                  - (( .properties.filer_console_route_name.value )).(( ..cf.cloud_controller.system_domain.value ))
           seaweedfs:
             filer: {}
 
@@ -152,6 +178,10 @@ packages:
           seaweedfs:
             s3:
               port: 8333
+              tls:
+                enabled: (( .properties.s3_tls_enabled.value ))
+                certificate: (( .properties.s3_tls_certificate.cert_pem ))
+                private_key: (( .properties.s3_tls_certificate.private_key_pem ))
               config:
                 enabled: true
                 identities:
@@ -169,6 +199,12 @@ packages:
         templates:
           - name: seaweedfs-broker
             release: seaweedfs
+          - name: route_registrar
+            release: routing
+            consumes:
+              nats-tls:
+                from: nats-tls
+                deployment: (( ..cf.deployment_name ))
           - name: bpm
             release: bpm
         memory: 1024
@@ -180,17 +216,26 @@ packages:
         dynamic_ip: 1
         max_in_flight: 1
         properties:
+          route_registrar:
+            routes:
+              - name: seaweedfs-broker
+                port: 8080
+                registration_interval: 20s
+                uris:
+                  - (( .properties.broker_route_name.value )).(( ..cf.cloud_controller.system_domain.value ))
           seaweedfs:
             broker:
               port: 8080
               auth:
                 username: (( .properties.generated_broker_credentials.identity ))
                 password: (( .properties.generated_broker_credentials.password ))
+              catalog:
+                icon_base64: (( .properties.catalog_icon_base64.value ))
               shared_cluster:
                 enabled: (( .properties.shared_cluster_enabled.value ))
                 # S3 endpoint derived from BOSH link (leave empty)
                 s3_endpoint: ""
-                use_ssl: false
+                use_ssl: (( .properties.s3_tls_enabled.value ))
                 access_key: (( .properties.generated_s3_credentials.identity ))
                 secret_key: (( .properties.generated_s3_credentials.password ))
               # BOSH Director configuration for on-demand deployments
@@ -208,6 +253,9 @@ packages:
                 stemcell_os: ubuntu-jammy
                 stemcell_version: "1.719"
                 network: (( $self.service_network ))
+              cf:
+                system_domain: (( ..cf.cloud_controller.system_domain.value ))
+                apps_domain: (( ..cf.cloud_controller.apps_domain.value ))
 
       # Register broker errand (post-deploy)
       - name: register-broker
@@ -230,7 +278,8 @@ packages:
             skip_ssl_validation: true
           broker:
             name: seaweedfs
-            # URL derived from BOSH link to seaweedfs-broker instance group
+            # Use routed URL via gorouter for stable, externally-accessible broker endpoint
+            url: https://(( .properties.broker_route_name.value )).(( ..cf.cloud_controller.system_domain.value ))
             username: (( .properties.generated_broker_credentials.identity ))
             password: (( .properties.generated_broker_credentials.password ))
             enable_service_access: true
@@ -261,6 +310,10 @@ packages:
     type: bosh-release
     path: resources/bpm-release.tgz
 
+  - name: routing
+    type: bosh-release
+    path: resources/routing-release.tgz
+
 forms:
   - name: endpoint_config
     label: Service Endpoints
@@ -282,6 +335,32 @@ forms:
           Hostname prefix for the service broker endpoint (combined with system domain).
           Used by Cloud Foundry to register and communicate with the service broker.
         default: seaweedfs-broker
+      - name: master_console_enabled
+        type: boolean
+        label: Enable Master Console Route
+        description: |
+          Enable external access to the Master web console via gorouter.
+        default: false
+      - name: master_console_route_name
+        type: string
+        label: Master Console Hostname
+        description: |
+          Hostname prefix for the Master web console (combined with system domain).
+          Example: 'seaweedfs-master' creates seaweedfs-master.sys.example.com
+        default: seaweedfs-master
+      - name: filer_console_enabled
+        type: boolean
+        label: Enable Filer Console Route
+        description: |
+          Enable external access to the Filer web console via gorouter.
+        default: false
+      - name: filer_console_route_name
+        type: string
+        label: Filer Console Hostname
+        description: |
+          Hostname prefix for the Filer web console (combined with system domain).
+          Example: 'seaweedfs-filer' creates seaweedfs-filer.sys.example.com
+        default: seaweedfs-filer
 
   - name: shared_cluster_config
     label: Shared Cluster Configuration
@@ -327,4 +406,40 @@ forms:
         type: simple_credentials
         label: S3 Admin Credentials (Auto-generated)
         configurable: false
+
+  - name: service_catalog_config
+    label: Service Catalog
+    description: |
+      Configure how SeaweedFS appears in the Cloud Foundry marketplace.
+    properties:
+      - name: catalog_icon_base64
+        type: text
+        label: Service Icon (Base64)
+        description: |
+          Base64-encoded PNG icon for the service catalog. This embeds the icon
+          as a data URI, making it available in air-gapped environments without
+          external network access. If left empty, the external SeaweedFS logo URL
+          will be used as fallback. To generate, run: base64 -i icon.png | tr -d '\n'
+        default: ""
+        optional: true
+
+  - name: tls_config
+    label: TLS/SSL Configuration
+    description: |
+      Configure TLS/SSL encryption for the SeaweedFS S3 endpoint.
+      When enabled, the S3 API will use HTTPS for secure communication.
+    properties:
+      - name: s3_tls_enabled
+        type: boolean
+        label: Enable TLS for S3 Endpoint
+        description: |
+          Enable TLS encryption for the S3 API endpoint. When enabled, clients
+          must use HTTPS to connect to the S3 endpoint.
+        default: false
+      - name: s3_tls_certificate
+        type: rsa_cert_credentials
+        label: S3 TLS Certificate
+        description: |
+          TLS certificate for the S3 endpoint. Auto-generated by Ops Manager
+          when TLS is enabled.
 

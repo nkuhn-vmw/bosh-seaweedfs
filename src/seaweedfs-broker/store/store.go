@@ -28,6 +28,7 @@ type ServiceInstance struct {
 	DeploymentName string `json:"deployment_name,omitempty"`
 	S3Endpoint     string `json:"s3_endpoint,omitempty"`
 	FilerEndpoint  string `json:"filer_endpoint,omitempty"`
+	ConsoleURL     string `json:"console_url,omitempty"`
 	AdminAccessKey string `json:"admin_access_key,omitempty"`
 	AdminSecretKey string `json:"admin_secret_key,omitempty"`
 

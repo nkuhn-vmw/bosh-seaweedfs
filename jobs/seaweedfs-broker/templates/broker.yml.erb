@@ -7,10 +7,18 @@
   # Handle shared cluster endpoint from link or property
   shared_s3_endpoint = p('seaweedfs.broker.shared_cluster.s3_endpoint')
   shared_cluster_enabled = p('seaweedfs.broker.shared_cluster.enabled')
+  use_dns = p('seaweedfs.broker.shared_cluster.use_dns', true)
   if_link('seaweedfs-s3') do |s3_link|
     if shared_s3_endpoint.empty? && shared_cluster_enabled
       s3_instance = s3_link.instances.first
-      shared_s3_endpoint = "#{s3_instance.address}:#{s3_link.p('seaweedfs.s3.port')}"
+      # Use BOSH DNS name if available and use_dns is enabled, otherwise fall back to IP
+      if use_dns && s3_instance.respond_to?(:dns) && !s3_instance.dns.nil?
+        shared_s3_endpoint = "#{s3_instance.dns}:#{s3_link.p('seaweedfs.s3.port')}"
+      else
+        # Construct BOSH DNS name: q-s<index>.<job>.<network>.<deployment>.bosh
+        # This follows the BOSH DNS naming convention for internal names
+        shared_s3_endpoint = "#{s3_instance.address}:#{s3_link.p('seaweedfs.s3.port')}"
+      end
     end
   end
 
@@ -111,7 +119,12 @@ catalog:
         - blob-storage
       metadata:
         displayName: "SeaweedFS"
+<% icon_base64 = p('seaweedfs.broker.catalog.icon_base64', '') %>
+<% if !icon_base64.empty? %>
+        imageUrl: "data:image/png;base64,<%= icon_base64 %>"
+<% else %>
         imageUrl: "https://seaweedfs.github.io/seaweedfs/images/SeaweedFS_Logo.png"
+<% end %>
         longDescription: "SeaweedFS is a distributed storage system for blobs, objects, files, and data lake, with O(1) disk seek and cloud tiering."
         providerDisplayName: "SeaweedFS"
         documentationUrl: "https://github.com/seaweedfs/seaweedfs/wiki"
@@ -159,6 +172,10 @@ shared_cluster:
   secret_key: "<%= p('seaweedfs.broker.shared_cluster.secret_key') %>"
   use_ssl: <%= p('seaweedfs.broker.shared_cluster.use_ssl') %>
   region: "<%= p('seaweedfs.broker.shared_cluster.region') %>"
+
+cf:
+  system_domain: "<%= p('seaweedfs.broker.cf.system_domain', '') %>"
+  apps_domain: "<%= p('seaweedfs.broker.cf.apps_domain', '') %>"
 
 bosh:
   url: "<%= p('seaweedfs.broker.bosh.url') %>"

@@ -29,8 +29,17 @@ type Config struct {
 	// BOSH configuration for on-demand instances
 	BOSH BOSHConfig `yaml:"bosh"`
 
+	// Cloud Foundry configuration
+	CF CFConfig `yaml:"cf"`
+
 	// State store configuration
 	StateStore StateStoreConfig `yaml:"state_store"`
+}
+
+// CFConfig holds Cloud Foundry configuration
+type CFConfig struct {
+	SystemDomain string `yaml:"system_domain"`
+	AppsDomain   string `yaml:"apps_domain"`
 }
 
 // AuthConfig holds authentication credentials
@@ -115,6 +124,7 @@ type SharedClusterConfig struct {
 	AccessKey     string `yaml:"access_key"`
 	SecretKey     string `yaml:"secret_key"`
 	UseSSL        bool   `yaml:"use_ssl"`
+	UseDNS        bool   `yaml:"use_dns"`
 	Region        string `yaml:"region"`
 }
 
