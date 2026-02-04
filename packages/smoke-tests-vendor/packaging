@@ -1,0 +1,5 @@
+set -e
+
+# Copy vendored Python packages
+mkdir -p ${BOSH_INSTALL_TARGET}/vendor
+cp -r smoke-tests-vendor/* ${BOSH_INSTALL_TARGET}/vendor/

@@ -1,0 +1,19 @@
+#!/bin/bash
+# Health check script for SeaweedFS Master
+# Returns 0 if healthy, 1 if unhealthy
+
+set -e
+
+PORT=<%= p('seaweedfs.master.port') %>
+TIMEOUT=5
+
+# Check if the master HTTP API is responding
+HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout ${TIMEOUT} "http://127.0.0.1:${PORT}/cluster/status" 2>/dev/null || echo "000")
+
+if [ "$HTTP_CODE" = "200" ]; then
+  echo "SeaweedFS Master is healthy"
+  exit 0
+else
+  echo "SeaweedFS Master health check failed (HTTP ${HTTP_CODE})"
+  exit 1
+fi

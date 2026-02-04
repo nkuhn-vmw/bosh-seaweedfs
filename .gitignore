@@ -1,2 +1,24 @@
+# BOSH release build artifacts
+.dev_builds/
+dev_releases/
+releases/
+blobs/
+artifacts/
+
+# Tile build outputs (if building tile from this repo)
 product/
 release/
+
+# Source archives (generated during build)
+packages/seaweedfs-broker/seaweedfs-broker.tar.gz
+src/seaweedfs-broker/seaweedfs-broker.tar.gz
+
+# Claude Code session data
+.claude/
+
+# OS files
+.DS_Store
+
+# IDE
+.idea/
+.vscode/

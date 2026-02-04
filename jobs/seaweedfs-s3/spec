@@ -7,6 +7,7 @@ templates:
   s3.json.erb: config/s3.json
   tls_cert.pem.erb: config/certs/tls_cert.pem
   tls_key.pem.erb: config/certs/tls_key.pem
+  health_check.erb: bin/health_check
 
 provides:
   - name: seaweedfs-s3

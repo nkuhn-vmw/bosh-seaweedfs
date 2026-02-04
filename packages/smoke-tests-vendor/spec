@@ -1,0 +1,4 @@
+---
+name: smoke-tests-vendor
+files:
+  - smoke-tests-vendor/**/*

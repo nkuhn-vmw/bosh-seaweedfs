@@ -1,0 +1,20 @@
+#!/bin/bash
+# Health check script for SeaweedFS S3 Gateway
+# Returns 0 if healthy, 1 if unhealthy
+
+set -e
+
+PORT=<%= p('seaweedfs.s3.port') %>
+TIMEOUT=5
+
+# Check if the S3 gateway is responding (any response from S3 is acceptable, including 403)
+HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout ${TIMEOUT} "http://127.0.0.1:${PORT}/" 2>/dev/null || echo "000")
+
+# S3 may return various codes (200, 403 for unauthenticated, etc.) - anything except connection failure is OK
+if [ "$HTTP_CODE" != "000" ]; then
+  echo "SeaweedFS S3 Gateway is healthy (HTTP ${HTTP_CODE})"
+  exit 0
+else
+  echo "SeaweedFS S3 Gateway health check failed - connection refused"
+  exit 1
+fi

@@ -1,0 +1,20 @@
+#!/bin/bash
+# Health check script for SeaweedFS Service Broker
+# Returns 0 if healthy, 1 if unhealthy
+
+set -e
+
+PORT=<%= p('seaweedfs.broker.port') %>
+TIMEOUT=5
+
+# Check if the broker API is responding (v2/catalog returns 401 without auth, which is OK)
+HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout ${TIMEOUT} "http://127.0.0.1:${PORT}/v2/catalog" 2>/dev/null || echo "000")
+
+# Broker may return 401 without auth - that's OK, it means it's running
+if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]; then
+  echo "SeaweedFS Broker is healthy (HTTP ${HTTP_CODE})"
+  exit 0
+else
+  echo "SeaweedFS Broker health check failed (HTTP ${HTTP_CODE})"
+  exit 1
+fi

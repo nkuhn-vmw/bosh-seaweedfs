@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""
+SeaweedFS Smoke Test Application
+
+This app reads S3 credentials from VCAP_SERVICES and performs basic S3 operations
+to validate the SeaweedFS service binding is working correctly.
+"""
+
+import json
+import os
+import sys
+import uuid
+from flask import Flask, jsonify
+
+app = Flask(__name__)
+
+def get_s3_credentials():
+    """Extract S3 credentials from VCAP_SERVICES."""
+    vcap_services = os.environ.get('VCAP_SERVICES', '{}')
+    try:
+        services = json.loads(vcap_services)
+    except json.JSONDecodeError:
+        return None, "Failed to parse VCAP_SERVICES"
+
+    # Look for seaweedfs service
+    seaweedfs_services = services.get('seaweedfs', [])
+    if not seaweedfs_services:
+        return None, "No seaweedfs service binding found"
+
+    credentials = seaweedfs_services[0].get('credentials', {})
+    if not credentials:
+        return None, "No credentials in service binding"
+
+    return credentials, None
+
+def test_s3_operations(credentials):
+    """Test basic S3 operations using boto3."""
+    try:
+        import boto3
+        from botocore.config import Config
+        from botocore.exceptions import ClientError
+    except ImportError:
+        return False, "boto3 not installed"
+
+    endpoint = credentials.get('endpoint') or credentials.get('s3_endpoint') or credentials.get('uri')
+    # Handle various credential field naming conventions
+    access_key = (credentials.get('access_key_id') or credentials.get('accessKey') or
+                  credentials.get('access_key') or credentials.get('AccessKeyId') or
+                  credentials.get('username'))
+    secret_key = (credentials.get('secret_access_key') or credentials.get('secretKey') or
+                  credentials.get('secret_key') or credentials.get('SecretAccessKey') or
+                  credentials.get('password'))
+    bucket = credentials.get('bucket') or credentials.get('bucket_name') or credentials.get('bucketName')
+    region = credentials.get('region', 'us-east-1')
+    use_ssl = credentials.get('use_ssl', True)
+
+    # Debug: log what credentials we received
+    import sys
+    print(f"Credentials received: {list(credentials.keys())}", file=sys.stderr)
+
+    if not all([endpoint, access_key, secret_key, bucket]):
+        return False, f"Missing credentials: endpoint={bool(endpoint)}, access_key={bool(access_key)}, secret_key={bool(secret_key)}, bucket={bool(bucket)}"
+
+    # Build endpoint URL
+    protocol = 'https' if use_ssl else 'http'
+    if not endpoint.startswith('http'):
+        endpoint_url = f"{protocol}://{endpoint}"
+    else:
+        endpoint_url = endpoint
+
+    # Create S3 client
+    config = Config(
+        signature_version='s3v4',
+        s3={'addressing_style': 'path'}
+    )
+
+    s3_client = boto3.client(
+        's3',
+        endpoint_url=endpoint_url,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        region_name=region,
+        config=config,
+        verify=False  # Allow self-signed certs
+    )
+
+    results = []
+    test_key = f"smoke-test-{uuid.uuid4()}.txt"
+    test_content = "SeaweedFS smoke test data"
+
+    # Test 1: Put Object
+    try:
+        s3_client.put_object(Bucket=bucket, Key=test_key, Body=test_content)
+        results.append({"test": "put_object", "status": "passed"})
+    except ClientError as e:
+        return False, f"put_object failed: {str(e)}"
+
+    # Test 2: Get Object
+    try:
+        response = s3_client.get_object(Bucket=bucket, Key=test_key)
+        body = response['Body'].read().decode('utf-8')
+        if body == test_content:
+            results.append({"test": "get_object", "status": "passed"})
+        else:
+            return False, f"get_object content mismatch: expected '{test_content}', got '{body}'"
+    except ClientError as e:
+        return False, f"get_object failed: {str(e)}"
+
+    # Test 3: List Objects
+    try:
+        response = s3_client.list_objects_v2(Bucket=bucket, Prefix="smoke-test-")
+        found = any(obj['Key'] == test_key for obj in response.get('Contents', []))
+        if found:
+            results.append({"test": "list_objects", "status": "passed"})
+        else:
+            return False, "list_objects did not return uploaded object"
+    except ClientError as e:
+        return False, f"list_objects failed: {str(e)}"
+
+    # Test 4: Delete Object
+    try:
+        s3_client.delete_object(Bucket=bucket, Key=test_key)
+        results.append({"test": "delete_object", "status": "passed"})
+    except ClientError as e:
+        return False, f"delete_object failed: {str(e)}"
+
+    return True, results
+
+@app.route('/')
+def index():
+    return jsonify({"status": "ok", "message": "SeaweedFS Smoke Test App"})
+
+@app.route('/test')
+def run_tests():
+    # Get credentials
+    credentials, error = get_s3_credentials()
+    if error:
+        return jsonify({"status": "failed", "error": error}), 500
+
+    # Run S3 tests
+    success, result = test_s3_operations(credentials)
+
+    if success:
+        return jsonify({
+            "status": "passed",
+            "tests": result,
+            "message": "All S3 operations completed successfully"
+        })
+    else:
+        return jsonify({
+            "status": "failed",
+            "error": result
+        }), 500
+
+@app.route('/health')
+def health():
+    return jsonify({"status": "healthy"})
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)

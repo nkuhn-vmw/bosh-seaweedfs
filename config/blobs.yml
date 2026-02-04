@@ -4,6 +4,9 @@ cf-cli/cf8-cli-8.8.2-linux64.tgz:
 golang/go1.21.6.linux-amd64.tar.gz:
   size: 66704768
   sha: sha256:3f934f40ac360b9c01f616a9aa1796d227d8b0328bf64cb045c7b8c4ee9caea4
+seaweedfs-broker/seaweedfs-broker.tar.gz:
+  size: 35113
+  sha: sha256:b6487ec5c885e6d2d10af9b93828c74b3a152ba0547069d9d44735713019c3f0
 seaweedfs/linux_amd64.tar.gz:
   size: 40265195
   sha: sha256:61c8a132c6753cc6726ab6dcc761e0fb2ae2bf7310b1276e82427f4a33dc2a7b

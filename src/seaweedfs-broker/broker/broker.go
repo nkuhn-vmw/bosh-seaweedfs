@@ -17,6 +17,7 @@ import (
 
 	"github.com/cloudfoundry/seaweedfs-broker/bosh"
 	"github.com/cloudfoundry/seaweedfs-broker/config"
+	"github.com/cloudfoundry/seaweedfs-broker/iam"
 	"github.com/cloudfoundry/seaweedfs-broker/store"
 )
 
@@ -35,6 +36,7 @@ type Broker struct {
 	store      store.Store
 	boshClient *bosh.Client
 	s3Client   *minio.Client
+	iamClient  *iam.Client
 }
 
 // New creates a new broker instance
@@ -70,6 +72,15 @@ func New(cfg *config.Config) (*Broker, error) {
 			return nil, fmt.Errorf("failed to create S3 client: %w", err)
 		}
 		b.s3Client = s3Client
+
+		// Initialize IAM client for dynamic credential management
+		b.iamClient = iam.NewClient(
+			cfg.SharedCluster.S3Endpoint,
+			cfg.SharedCluster.AccessKey,
+			cfg.SharedCluster.SecretKey,
+			cfg.SharedCluster.Region,
+			cfg.SharedCluster.UseSSL,
+		)
 	}
 
 	return b, nil
@@ -369,21 +380,22 @@ func (b *Broker) bindHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate credentials
-	accessKey := generateAccessKey()
-	secretKey := generateSecretKey()
-
 	binding := &store.ServiceBinding{
 		ID:         bindingID,
 		InstanceID: instanceID,
 		AppGUID:    req.AppGUID,
 		Parameters: req.Parameters,
 		CreatedAt:  time.Now(),
-		AccessKey:  accessKey,
-		SecretKey:  secretKey,
 	}
 
-	// Create S3 credentials on the cluster
+	// For dedicated clusters, pre-generate credentials (they go in the deployment manifest)
+	// For shared clusters, createS3Credentials will generate them via IAM API
+	if instance.DeploymentName != "" {
+		binding.AccessKey = generateAccessKey()
+		binding.SecretKey = generateSecretKey()
+	}
+
+	// Create S3 credentials on the cluster (for shared clusters, this calls IAM API)
 	if err := b.createS3Credentials(instance, binding); err != nil {
 		b.writeError(w, http.StatusInternalServerError, "BindError", err.Error())
 		return
@@ -569,6 +581,11 @@ func (b *Broker) buildCredentials(instance *store.ServiceInstance, binding *stor
 		useSSL = b.config.SharedCluster.UseSSL
 	}
 
+	// Always use the binding's credentials - they are created dynamically via IAM API
+	// for shared clusters, or configured in the deployment manifest for dedicated clusters
+	accessKey := binding.AccessKey
+	secretKey := binding.SecretKey
+
 	// Construct endpoint URL with appropriate protocol
 	protocol := "http"
 	if useSSL {
@@ -580,11 +597,11 @@ func (b *Broker) buildCredentials(instance *store.ServiceInstance, binding *stor
 		"endpoint":     endpoint,
 		"endpoint_url": endpointURL,
 		"bucket":       bucket,
-		"access_key":   binding.AccessKey,
-		"secret_key":   binding.SecretKey,
+		"access_key":   accessKey,
+		"secret_key":   secretKey,
 		"region":       b.config.SharedCluster.Region,
 		"use_ssl":      useSSL,
-		"uri":          fmt.Sprintf("s3://%s:%s@%s/%s", binding.AccessKey, binding.SecretKey, endpoint, bucket),
+		"uri":          fmt.Sprintf("s3://%s:%s@%s/%s", accessKey, secretKey, endpoint, bucket),
 	}
 
 	// Include console URL for dedicated clusters
@@ -689,17 +706,79 @@ func (b *Broker) deprovisionSharedBucket(instance *store.ServiceInstance) error 
 }
 
 func (b *Broker) createS3Credentials(instance *store.ServiceInstance, binding *store.ServiceBinding) error {
-	// For SeaweedFS, credentials are managed via the s3.json configuration
-	// In a production setup, you would call the filer API to create identity
-	// For now, we'll store the credentials and expect the broker to maintain
-	// the s3.json configuration via BOSH properties
+	// For dedicated clusters, credentials are managed in the deployment manifest
+	if instance.DeploymentName != "" {
+		log.Printf("Binding %s: Using dedicated cluster credentials for instance %s", binding.ID, instance.ID)
+		return nil
+	}
 
-	log.Printf("Created S3 credentials for binding %s: access_key=%s", binding.ID, binding.AccessKey)
+	// For shared clusters, use the IAM API to create dedicated credentials per binding
+	if b.iamClient == nil {
+		return fmt.Errorf("IAM client not initialized - cannot create per-binding credentials")
+	}
+
+	// Create an IAM user name based on the binding ID (sanitized for IAM)
+	// Format: cf-binding-<first 16 chars of binding ID>
+	userName := fmt.Sprintf("cf-binding-%s", binding.ID[:min(len(binding.ID), 16)])
+
+	log.Printf("Binding %s: Creating IAM user %s via SeaweedFS IAM API", binding.ID, userName)
+
+	// Create access key for this user (SeaweedFS auto-creates the user if needed)
+	accessKey, err := b.iamClient.CreateAccessKey(userName)
+	if err != nil {
+		log.Printf("Binding %s: IAM CreateAccessKey failed: %v", binding.ID, err)
+		return fmt.Errorf("failed to create S3 credentials via IAM API: %w", err)
+	}
+
+	// Store the IAM user name and credentials
+	binding.IAMUserName = userName
+	binding.AccessKey = accessKey.AccessKeyID
+	binding.SecretKey = accessKey.SecretAccessKey
+
+	log.Printf("Binding %s: Created IAM credentials for user %s, access_key=%s",
+		binding.ID, userName, accessKey.AccessKeyID)
+
+	// Optionally attach a policy to restrict access to only this binding's bucket
+	// Note: SeaweedFS policy support may be limited
+	policyName := fmt.Sprintf("bucket-access-%s", binding.ID[:min(len(binding.ID), 8)])
+	if err := b.iamClient.PutUserPolicy(userName, policyName, instance.BucketName); err != nil {
+		// Policy attachment is optional - log but don't fail
+		log.Printf("Warning: Could not attach bucket policy for user %s: %v", userName, err)
+	}
+
 	return nil
 }
 
 func (b *Broker) deleteS3Credentials(instance *store.ServiceInstance, binding *store.ServiceBinding) error {
-	log.Printf("Deleted S3 credentials for binding %s", binding.ID)
+	// For dedicated clusters, credentials are managed in the deployment manifest
+	if instance.DeploymentName != "" {
+		log.Printf("Binding %s: Dedicated cluster credentials will be removed with deployment", binding.ID)
+		return nil
+	}
+
+	// For shared clusters, delete the IAM credentials
+	if b.iamClient == nil || binding.IAMUserName == "" {
+		log.Printf("Binding %s: No IAM credentials to delete", binding.ID)
+		return nil
+	}
+
+	log.Printf("Binding %s: Deleting IAM credentials for user %s", binding.ID, binding.IAMUserName)
+
+	// Delete the user policy first (best effort)
+	policyName := fmt.Sprintf("bucket-access-%s", binding.ID[:min(len(binding.ID), 8)])
+	if err := b.iamClient.DeleteUserPolicy(binding.IAMUserName, policyName); err != nil {
+		log.Printf("Warning: Could not delete user policy: %v", err)
+	}
+
+	// Delete the access key
+	if binding.AccessKey != "" {
+		if err := b.iamClient.DeleteAccessKey(binding.IAMUserName, binding.AccessKey); err != nil {
+			log.Printf("Warning: Could not delete access key %s: %v", binding.AccessKey, err)
+			// Don't fail the unbind operation even if cleanup fails
+		}
+	}
+
+	log.Printf("Binding %s: Deleted IAM credentials for user %s", binding.ID, binding.IAMUserName)
 	return nil
 }
 

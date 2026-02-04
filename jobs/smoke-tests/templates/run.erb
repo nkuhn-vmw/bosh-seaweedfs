@@ -1,0 +1,316 @@
+#!/bin/bash
+#
+# SeaweedFS Smoke Test Errand
+#
+# This errand deploys a test application to Cloud Foundry, creates a SeaweedFS
+# service instance, binds it to the app, and validates S3 connectivity.
+#
+
+set -e
+
+# Add cf-cli to PATH
+export PATH="/var/vcap/packages/cf-cli/bin:${PATH}"
+
+# Set CF_HOME to ensure config persists across directory changes
+export CF_HOME="/var/vcap/data/smoke-tests/cf_home"
+mkdir -p ${CF_HOME}
+
+LOG_DIR=/var/vcap/sys/log/smoke-tests
+JOB_DIR=/var/vcap/jobs/smoke-tests
+APP_DIR=${JOB_DIR}/test_app
+
+mkdir -p ${LOG_DIR}
+exec > >(tee -a ${LOG_DIR}/smoke-tests.log) 2>&1
+
+echo "========================================="
+echo "SeaweedFS Smoke Tests"
+echo "Started: $(date)"
+echo "========================================="
+
+# Configuration
+CF_API="<%= p('cf.api_url') %>"
+CF_USER="<%= p('cf.admin_username') %>"
+CF_PASS="<%= p('cf.admin_password') %>"
+CF_ORG="<%= p('cf.org') %>"
+CF_SPACE="<%= p('cf.space') %>"
+SKIP_SSL="<%= p('cf.skip_ssl_validation') %>"
+SERVICE_NAME="<%= p('smoke_tests.service_name') %>"
+PLAN_NAME="<%= p('smoke_tests.plan_name') %>"
+TIMEOUT_MINUTES="<%= p('smoke_tests.timeout_minutes') %>"
+CLEANUP="<%= p('smoke_tests.cleanup') %>"
+APP_DOMAIN="<%= p('smoke_tests.app_domain') %>"
+
+APP_NAME="seaweedfs-smoke-test"
+SERVICE_INSTANCE="seaweedfs-smoke-test-instance"
+
+# Cleanup function
+cleanup() {
+  echo ""
+  echo "========================================="
+  echo "Cleanup"
+  echo "========================================="
+
+  if [ "${CLEANUP}" = "true" ]; then
+    echo "Cleaning up test resources..."
+
+    # Unbind service
+    cf unbind-service ${APP_NAME} ${SERVICE_INSTANCE} 2>/dev/null || true
+
+    # Delete app
+    cf delete ${APP_NAME} -f 2>/dev/null || true
+
+    # Delete service instance
+    cf delete-service ${SERVICE_INSTANCE} -f 2>/dev/null || true
+
+    # Wait for service to be deleted
+    for i in $(seq 1 30); do
+      if ! cf service ${SERVICE_INSTANCE} >/dev/null 2>&1; then
+        break
+      fi
+      echo "Waiting for service instance deletion..."
+      sleep 5
+    done
+
+    # Delete org (which also deletes space)
+    cf delete-org ${CF_ORG} -f 2>/dev/null || true
+
+    echo "Cleanup completed"
+  else
+    echo "Cleanup disabled - leaving test resources in place"
+    echo "  Org: ${CF_ORG}"
+    echo "  Space: ${CF_SPACE}"
+    echo "  App: ${APP_NAME}"
+    echo "  Service: ${SERVICE_INSTANCE}"
+  fi
+}
+
+# Set trap for cleanup
+trap cleanup EXIT
+
+# Error handler
+fail() {
+  echo ""
+  echo "========================================="
+  echo "SMOKE TEST FAILED"
+  echo "========================================="
+  echo "Error: $1"
+  exit 1
+}
+
+echo ""
+echo "Step 1: Authenticate with Cloud Foundry"
+echo "----------------------------------------"
+
+SSL_FLAG=""
+if [ "${SKIP_SSL}" = "true" ]; then
+  SSL_FLAG="--skip-ssl-validation"
+fi
+
+cf api ${CF_API} ${SSL_FLAG}
+cf auth ${CF_USER} "${CF_PASS}"
+
+echo "Authentication successful"
+
+echo ""
+echo "Step 2: Create organization and space"
+echo "--------------------------------------"
+
+# Create org if it doesn't exist
+if ! cf org ${CF_ORG} >/dev/null 2>&1; then
+  cf create-org ${CF_ORG}
+fi
+
+cf target -o ${CF_ORG}
+
+# Create space if it doesn't exist
+if ! cf space ${CF_SPACE} >/dev/null 2>&1; then
+  cf create-space ${CF_SPACE}
+fi
+
+cf target -o ${CF_ORG} -s ${CF_SPACE}
+
+echo "Targeted: ${CF_ORG}/${CF_SPACE}"
+
+echo ""
+echo "Step 3: Verify SeaweedFS service is available"
+echo "----------------------------------------------"
+
+if ! cf marketplace | grep -q "${SERVICE_NAME}"; then
+  fail "SeaweedFS service '${SERVICE_NAME}' not found in marketplace"
+fi
+
+echo "Service '${SERVICE_NAME}' found in marketplace"
+
+if ! cf marketplace -e ${SERVICE_NAME} | grep -q "${PLAN_NAME}"; then
+  fail "Plan '${PLAN_NAME}' not found for service '${SERVICE_NAME}'"
+fi
+
+echo "Plan '${PLAN_NAME}' found"
+
+echo ""
+echo "Step 4: Create service instance"
+echo "--------------------------------"
+
+# Delete existing service instance if present
+cf delete-service ${SERVICE_INSTANCE} -f 2>/dev/null || true
+sleep 5
+
+cf create-service ${SERVICE_NAME} ${PLAN_NAME} ${SERVICE_INSTANCE}
+
+# Wait for service to be created
+echo "Waiting for service instance to be ready..."
+SERVICE_READY=false
+for i in $(seq 1 ${TIMEOUT_MINUTES}); do
+  # Get full service output for debugging
+  SERVICE_OUTPUT=$(cf service ${SERVICE_INSTANCE} 2>&1)
+
+  # Check for various success indicators (handles both sync and async services)
+  # CF CLI v8 format: "status: create succeeded" or just shows service details without "in progress"
+  if echo "${SERVICE_OUTPUT}" | grep -qi "create succeeded"; then
+    echo "Service instance created successfully (async)"
+    SERVICE_READY=true
+    break
+  elif echo "${SERVICE_OUTPUT}" | grep -qi "status:.*succeeded"; then
+    echo "Service instance created successfully"
+    SERVICE_READY=true
+    break
+  elif echo "${SERVICE_OUTPUT}" | grep -qi "bound apps:" && ! echo "${SERVICE_OUTPUT}" | grep -qi "in progress"; then
+    # Synchronous service - if we see service details without "in progress", it's ready
+    echo "Service instance created successfully (sync)"
+    SERVICE_READY=true
+    break
+  elif echo "${SERVICE_OUTPUT}" | grep -qi "failed"; then
+    echo "Service output:"
+    echo "${SERVICE_OUTPUT}"
+    fail "Service instance creation failed"
+  fi
+
+  # Show current status
+  CURRENT_STATUS=$(echo "${SERVICE_OUTPUT}" | grep -i "status:" | head -1 || echo "checking...")
+  echo "  ${CURRENT_STATUS} (attempt ${i}/${TIMEOUT_MINUTES})"
+  sleep 60
+done
+
+if [ "${SERVICE_READY}" != "true" ]; then
+  echo "Final service status:"
+  cf service ${SERVICE_INSTANCE}
+  fail "Service instance creation timed out"
+fi
+
+echo ""
+echo "Step 5: Push test application"
+echo "------------------------------"
+
+# Delete existing app if present
+cf delete ${APP_NAME} -f 2>/dev/null || true
+
+# Copy vendored Python dependencies to app directory
+VENDOR_PKG=/var/vcap/packages/smoke-tests-vendor/vendor
+if [ -d "${VENDOR_PKG}" ]; then
+  echo "Copying vendored Python dependencies..."
+  cp -r ${VENDOR_PKG} ${APP_DIR}/vendor
+  ls -la ${APP_DIR}/vendor/
+else
+  echo "Warning: Vendored dependencies not found at ${VENDOR_PKG}"
+fi
+
+cd ${APP_DIR}
+cf push ${APP_NAME} --no-start
+
+echo "Application pushed successfully"
+
+echo ""
+echo "Step 6: Bind service to application"
+echo "------------------------------------"
+
+cf bind-service ${APP_NAME} ${SERVICE_INSTANCE}
+echo "Service bound successfully"
+
+echo ""
+echo "Step 7: Start application"
+echo "-------------------------"
+
+# Start the app - capture failure for debugging
+if ! cf start ${APP_NAME}; then
+  echo ""
+  echo "App failed to start. Getting logs..."
+  echo ""
+  echo "=== Recent App Logs ==="
+  cf logs ${APP_NAME} --recent || true
+  echo ""
+  echo "=== App Events ==="
+  cf events ${APP_NAME} || true
+  echo ""
+  fail "Application failed to start (see logs above)"
+fi
+
+# Wait for app to start
+echo "Waiting for application to start..."
+APP_STARTED=false
+for i in $(seq 1 30); do
+  # CF CLI v8 shows app details differently - check for running instances
+  APP_OUTPUT=$(cf app ${APP_NAME} 2>&1)
+
+  # Check if app is running by looking for "running" instances
+  if echo "${APP_OUTPUT}" | grep -qE "instances:.*[1-9]+/[0-9]+.*running|#0.*running"; then
+    echo "Application started"
+    APP_STARTED=true
+    break
+  fi
+
+  # Also check for "started" state (older format)
+  if echo "${APP_OUTPUT}" | grep -qiE "^state:.*started|requested state:.*started"; then
+    echo "Application started"
+    APP_STARTED=true
+    break
+  fi
+
+  # Show current status for debugging
+  CURRENT_STATE=$(echo "${APP_OUTPUT}" | grep -iE "state:|instances:" | head -2 || echo "checking...")
+  echo "  ${CURRENT_STATE} (attempt ${i}/30)"
+  sleep 10
+done
+
+if [ "${APP_STARTED}" != "true" ]; then
+  echo "App details:"
+  cf app ${APP_NAME}
+  echo ""
+  echo "App logs:"
+  cf logs ${APP_NAME} --recent
+  fail "Application failed to start"
+fi
+
+echo ""
+echo "Step 8: Run S3 connectivity tests"
+echo "----------------------------------"
+
+APP_URL="https://${APP_NAME}.${APP_DOMAIN}"
+echo "Testing: ${APP_URL}/test"
+
+# Give the app a moment to fully initialize
+sleep 10
+
+# Run the test
+RESPONSE=$(curl -sk "${APP_URL}/test" 2>&1)
+HTTP_CODE=$(curl -sk -o /dev/null -w '%{http_code}' "${APP_URL}/test" 2>&1)
+
+echo "Response (HTTP ${HTTP_CODE}):"
+echo "${RESPONSE}" | python3 -m json.tool 2>/dev/null || echo "${RESPONSE}"
+
+if [ "${HTTP_CODE}" = "200" ]; then
+  if echo "${RESPONSE}" | grep -q '"status": "passed"'; then
+    echo ""
+    echo "========================================="
+    echo "SMOKE TEST PASSED"
+    echo "========================================="
+    echo "All S3 operations completed successfully"
+    exit 0
+  else
+    fail "Tests did not pass: ${RESPONSE}"
+  fi
+else
+  echo ""
+  echo "App logs:"
+  cf logs ${APP_NAME} --recent | tail -50
+  fail "Test endpoint returned HTTP ${HTTP_CODE}: ${RESPONSE}"
+fi

@@ -9,6 +9,7 @@ templates:
   server.crt.erb: config/certs/server.crt
   server.key.erb: config/certs/server.key
   bosh_ca.crt.erb: config/certs/bosh_ca.crt
+  health_check.erb: bin/health_check
 
 packages:
   - seaweedfs-broker

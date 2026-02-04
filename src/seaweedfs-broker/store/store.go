@@ -48,6 +48,9 @@ type ServiceBinding struct {
 	// Credentials
 	AccessKey string `json:"access_key"`
 	SecretKey string `json:"secret_key"`
+
+	// IAM identity info for cleanup
+	IAMUserName string `json:"iam_user_name,omitempty"`
 }
 
 // State represents the complete broker state
