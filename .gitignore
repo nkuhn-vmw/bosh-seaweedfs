@@ -9,9 +9,10 @@ artifacts/
 product/
 release/
 
-# Source archives (generated during build)
+# Source archives (generated during build - MUST be excluded to prevent nested tarball issues)
 packages/seaweedfs-broker/seaweedfs-broker.tar.gz
 src/seaweedfs-broker/seaweedfs-broker.tar.gz
+src/**/*.tar.gz
 
 # Claude Code session data
 .claude/
