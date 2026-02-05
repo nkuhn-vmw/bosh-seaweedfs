@@ -74,12 +74,25 @@ func New(cfg *config.Config) (*Broker, error) {
 		b.s3Client = s3Client
 
 		// Initialize IAM client for dynamic credential management
+		// Use the internal IAM endpoint (direct BOSH connection) to bypass gorouter
+		// which may interfere with IAM API requests
+		iamEndpoint := cfg.SharedCluster.IAMEndpoint
+		if iamEndpoint == "" {
+			// Fall back to S3 endpoint if IAM endpoint not configured
+			iamEndpoint = cfg.SharedCluster.S3Endpoint
+		}
+		// Internal BOSH endpoints don't use SSL
+		iamUseSSL := false
+		if iamEndpoint == cfg.SharedCluster.S3Endpoint {
+			iamUseSSL = cfg.SharedCluster.UseSSL
+		}
+		log.Printf("Initializing IAM client with endpoint: %s (SSL: %v)", iamEndpoint, iamUseSSL)
 		b.iamClient = iam.NewClient(
-			cfg.SharedCluster.S3Endpoint,
+			iamEndpoint,
 			cfg.SharedCluster.AccessKey,
 			cfg.SharedCluster.SecretKey,
 			cfg.SharedCluster.Region,
-			cfg.SharedCluster.UseSSL,
+			iamUseSSL,
 		)
 	}
 
@@ -723,7 +736,13 @@ func (b *Broker) createS3Credentials(instance *store.ServiceInstance, binding *s
 
 	log.Printf("Binding %s: Creating IAM user %s via SeaweedFS IAM API", binding.ID, userName)
 
-	// Create access key for this user (SeaweedFS auto-creates the user if needed)
+	// Create the IAM user first
+	if err := b.iamClient.CreateUser(userName); err != nil {
+		log.Printf("Binding %s: IAM CreateUser failed: %v", binding.ID, err)
+		return fmt.Errorf("failed to create IAM user: %w", err)
+	}
+
+	// Create access key for the user
 	accessKey, err := b.iamClient.CreateAccessKey(userName)
 	if err != nil {
 		log.Printf("Binding %s: IAM CreateAccessKey failed: %v", binding.ID, err)
@@ -774,11 +793,15 @@ func (b *Broker) deleteS3Credentials(instance *store.ServiceInstance, binding *s
 	if binding.AccessKey != "" {
 		if err := b.iamClient.DeleteAccessKey(binding.IAMUserName, binding.AccessKey); err != nil {
 			log.Printf("Warning: Could not delete access key %s: %v", binding.AccessKey, err)
-			// Don't fail the unbind operation even if cleanup fails
 		}
 	}
 
-	log.Printf("Binding %s: Deleted IAM credentials for user %s", binding.ID, binding.IAMUserName)
+	// Delete the IAM user
+	if err := b.iamClient.DeleteUser(binding.IAMUserName); err != nil {
+		log.Printf("Warning: Could not delete IAM user %s: %v", binding.IAMUserName, err)
+	}
+
+	log.Printf("Binding %s: Deleted IAM credentials and user %s", binding.ID, binding.IAMUserName)
 	return nil
 }
 

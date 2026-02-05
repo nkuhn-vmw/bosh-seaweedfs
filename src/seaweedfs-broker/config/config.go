@@ -120,6 +120,7 @@ type DedicatedPlanConfig struct {
 type SharedClusterConfig struct {
 	Enabled       bool   `yaml:"enabled"`
 	S3Endpoint    string `yaml:"s3_endpoint"`
+	IAMEndpoint   string `yaml:"iam_endpoint"` // Internal endpoint for IAM operations (no gorouter)
 	FilerEndpoint string `yaml:"filer_endpoint"`
 	AccessKey     string `yaml:"access_key"`
 	SecretKey     string `yaml:"secret_key"`

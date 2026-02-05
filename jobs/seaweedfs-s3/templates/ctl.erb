@@ -34,6 +34,10 @@ case $1 in
     <% if p('seaweedfs.s3.tls.enabled') %>
     EXTRA_ARGS="${EXTRA_ARGS} -cert=${CERTS_DIR}/tls_cert.pem -key=${CERTS_DIR}/tls_key.pem"
     <% end %>
+    <% if !p('seaweedfs.s3.iam.enabled') %>
+    # Disable IAM API if explicitly turned off (it's enabled by default in SeaweedFS)
+    EXTRA_ARGS="${EXTRA_ARGS} -iam=false"
+    <% end %>
 
     exec chpst -u vcap:vcap ${WEED} s3 \
       -ip.bind=<%= p('seaweedfs.s3.ip_bind') %> \

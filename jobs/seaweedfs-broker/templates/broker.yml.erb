@@ -8,16 +8,23 @@
   shared_s3_endpoint = p('seaweedfs.broker.shared_cluster.s3_endpoint')
   shared_cluster_enabled = p('seaweedfs.broker.shared_cluster.enabled')
   use_dns = p('seaweedfs.broker.shared_cluster.use_dns', true)
+
+  # Internal endpoint for IAM operations (bypasses gorouter)
+  internal_s3_endpoint = ""
+
   if_link('seaweedfs-s3') do |s3_link|
+    s3_instance = s3_link.instances.first
+    s3_port = s3_link.p('seaweedfs.s3.port')
+
+    # Always capture internal endpoint for IAM operations
+    internal_s3_endpoint = "#{s3_instance.address}:#{s3_port}"
+
     if shared_s3_endpoint.empty? && shared_cluster_enabled
-      s3_instance = s3_link.instances.first
       # Use BOSH DNS name if available and use_dns is enabled, otherwise fall back to IP
       if use_dns && s3_instance.respond_to?(:dns) && !s3_instance.dns.nil?
-        shared_s3_endpoint = "#{s3_instance.dns}:#{s3_link.p('seaweedfs.s3.port')}"
+        shared_s3_endpoint = "#{s3_instance.dns}:#{s3_port}"
       else
-        # Construct BOSH DNS name: q-s<index>.<job>.<network>.<deployment>.bosh
-        # This follows the BOSH DNS naming convention for internal names
-        shared_s3_endpoint = "#{s3_instance.address}:#{s3_link.p('seaweedfs.s3.port')}"
+        shared_s3_endpoint = "#{s3_instance.address}:#{s3_port}"
       end
     end
   end
@@ -167,6 +174,8 @@ catalog:
 shared_cluster:
   enabled: <%= shared_cluster_enabled %>
   s3_endpoint: "<%= shared_s3_endpoint %>"
+  # Internal endpoint for IAM operations (direct connection, no gorouter)
+  iam_endpoint: "<%= internal_s3_endpoint %>"
   filer_endpoint: "<%= p('seaweedfs.broker.shared_cluster.filer_endpoint') %>"
   access_key: "<%= p('seaweedfs.broker.shared_cluster.access_key') %>"
   secret_key: "<%= p('seaweedfs.broker.shared_cluster.secret_key') %>"

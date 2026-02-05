@@ -57,6 +57,10 @@ properties:
   seaweedfs.s3.config.enabled:
     description: "Enable S3 config file with credentials"
     default: false
+  seaweedfs.s3.iam.enabled:
+    description: "Enable IAM API for dynamic credential management"
+    default: true
+
   seaweedfs.s3.config.identities:
     description: "List of S3 identities with credentials"
     default: []

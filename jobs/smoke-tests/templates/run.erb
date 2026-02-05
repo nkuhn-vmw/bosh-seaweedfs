@@ -298,7 +298,7 @@ echo "Response (HTTP ${HTTP_CODE}):"
 echo "${RESPONSE}" | python3 -m json.tool 2>/dev/null || echo "${RESPONSE}"
 
 if [ "${HTTP_CODE}" = "200" ]; then
-  if echo "${RESPONSE}" | grep -q '"status": "passed"'; then
+  if echo "${RESPONSE}" | grep -q '"status"[: ]*"passed"'; then
     echo ""
     echo "========================================="
     echo "SMOKE TEST PASSED"
