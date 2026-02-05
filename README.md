@@ -5,9 +5,11 @@ This BOSH release deploys [SeaweedFS](https://github.com/seaweedfs/seaweedfs), a
 ## Features
 
 - **Distributed Object Storage**: SeaweedFS master, volume, and filer servers
-- **S3-Compatible API**: Full S3 gateway with credential management
-- **Open Service Broker**: Provision buckets and dedicated clusters on-demand
-- **Cloud Foundry Integration**: Route registration via Go Router with TLS
+- **S3-Compatible API**: Full S3 gateway with IAM-based credential management
+- **Per-Binding IAM Credentials**: Each service binding gets its own isolated IAM user and access keys via SeaweedFS's embedded IAM API
+- **Open Service Broker**: Provision shared buckets or dedicated clusters on-demand
+- **Cloud Foundry Integration**: Route registration via Go Router with TLS termination
+- **Smoke Tests**: Automated errand validates end-to-end S3 connectivity (put, get, list, delete)
 - **Tanzu Operations Manager Tile**: One-click deployment for Tanzu platform
 
 ## Components
@@ -22,6 +24,7 @@ This BOSH release deploys [SeaweedFS](https://github.com/seaweedfs/seaweedfs), a
 | **route-registrar** | Cloud Foundry route registration for SSL/TLS |
 | **register-broker** | Errand to register the service broker with CF |
 | **deregister-broker** | Errand to deregister the service broker |
+| **smoke-tests** | Errand that validates S3 operations end-to-end |
 
 ## Quick Start
 
@@ -58,7 +61,9 @@ The SeaweedFS service broker implements the [Open Service Broker API](https://ww
 
 ### Shared Plan
 - Creates a dedicated S3 bucket on the shared SeaweedFS cluster
-- Generates unique access credentials per binding
+- Generates unique IAM user and access keys per binding via SeaweedFS IAM API
+- Bucket-scoped IAM policies restrict each binding to its own bucket
+- Credentials are automatically cleaned up on unbind (user, access key, and policy deleted)
 - Ideal for development and small workloads
 
 ### Dedicated Plans
@@ -90,12 +95,13 @@ cf env my-app
 
 ### Binding Credentials
 
-When you bind a service instance, you receive:
+When you bind a service instance, the broker creates a dedicated IAM user with its own access keys. Each binding receives unique, isolated credentials:
 
 ```json
 {
   "credentials": {
     "endpoint": "s3.seaweedfs.example.com",
+    "endpoint_url": "https://s3.seaweedfs.example.com",
     "bucket": "cf-abc123-def456",
     "access_key": "AKIAEXAMPLE",
     "secret_key": "secretkey123",
@@ -211,6 +217,7 @@ The tile is output to `product/seaweedfs-<version>.pivotal`.
 | `seaweedfs.s3.port` | HTTP port | 8333 |
 | `seaweedfs.s3.port_grpc` | gRPC port | 18333 |
 | `seaweedfs.s3.filer` | Filer server address | "localhost:8888" |
+| `seaweedfs.s3.iam.enabled` | Enable embedded IAM API for dynamic credentials | true |
 | `seaweedfs.s3.tls.enabled` | Enable TLS | false |
 | `seaweedfs.s3.config.enabled` | Enable S3 credentials config | false |
 | `seaweedfs.s3.config.identities` | S3 access credentials | [] |
@@ -282,6 +289,7 @@ bosh-seaweedfs/
 │   ├── seaweedfs-filer/
 │   ├── seaweedfs-s3/
 │   ├── seaweedfs-broker/
+│   ├── smoke-tests/
 │   ├── route-registrar/
 │   ├── register-broker/
 │   └── deregister-broker/
