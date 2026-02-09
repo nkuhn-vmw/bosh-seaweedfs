@@ -30,6 +30,8 @@ type ServiceInstance struct {
 	IAMEndpoint    string `json:"iam_endpoint,omitempty"` // Internal IP:port for IAM operations
 	FilerEndpoint  string `json:"filer_endpoint,omitempty"`
 	ConsoleURL     string `json:"console_url,omitempty"`
+	FilerURL       string `json:"filer_url,omitempty"`
+	VolumeURL      string `json:"volume_url,omitempty"`
 	AdminAccessKey string `json:"admin_access_key,omitempty"`
 	AdminSecretKey string `json:"admin_secret_key,omitempty"`
 

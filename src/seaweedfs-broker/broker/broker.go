@@ -655,9 +655,17 @@ func (b *Broker) buildCredentials(instance *store.ServiceInstance, binding *stor
 		"uri":          fmt.Sprintf("s3://%s:%s@%s/%s", accessKey, secretKey, endpoint, bucket),
 	}
 
-	// Include console URL for dedicated clusters
-	if instance.DeploymentName != "" && instance.ConsoleURL != "" {
-		creds["console_url"] = instance.ConsoleURL
+	// Include management URLs for dedicated clusters
+	if instance.DeploymentName != "" {
+		if instance.ConsoleURL != "" {
+			creds["console_url"] = instance.ConsoleURL
+		}
+		if instance.FilerURL != "" {
+			creds["filer_url"] = instance.FilerURL
+		}
+		if instance.VolumeURL != "" {
+			creds["volume_url"] = instance.VolumeURL
+		}
 	}
 
 	return map[string]any{
@@ -975,10 +983,16 @@ func (b *Broker) provisionDedicatedCluster(instance *store.ServiceInstance, plan
 	if hasCFDeployment && hasNATSConfig {
 		s3RouteHost := fmt.Sprintf("seaweedfs-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
 		masterConsoleHost := fmt.Sprintf("seaweedfs-console-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+		filerHost := fmt.Sprintf("seaweedfs-filer-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+		volumeHost := fmt.Sprintf("seaweedfs-volume-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
 		instance.S3Endpoint = s3RouteHost
 		instance.ConsoleURL = fmt.Sprintf("https://%s", masterConsoleHost)
+		instance.FilerURL = fmt.Sprintf("https://%s", filerHost)
+		instance.VolumeURL = fmt.Sprintf("https://%s", volumeHost)
 		log.Printf("Set S3Endpoint to gorouter route: %s", instance.S3Endpoint)
 		log.Printf("Set ConsoleURL to master route: %s", instance.ConsoleURL)
+		log.Printf("Set FilerURL to filer route: %s", instance.FilerURL)
+		log.Printf("Set VolumeURL to volume route: %s", instance.VolumeURL)
 	}
 
 	// Create the default bucket on the dedicated cluster using admin credentials
@@ -1190,6 +1204,56 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 		)
 	}
 
+	// Build the filer instance group jobs section
+	filerHost := ""
+	filerJobsSection := fmt.Sprintf(`  jobs:
+  - name: seaweedfs-filer
+    release: %s`,
+		b.config.BOSH.ReleaseName,
+	)
+
+	if canRouteRegister && s3RouteHost != "" {
+		filerHost = fmt.Sprintf("seaweedfs-filer-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+		filerJobsSection += natsRouteRegJobs
+		filerJobsSection += fmt.Sprintf(`
+  properties:%s
+    route_registrar:
+      routes:
+      - name: seaweedfs-filer-ondemand
+        port: 8888
+        registration_interval: 20s
+        uris:
+        - %s`,
+			natsRouteRegProps,
+			filerHost,
+		)
+	}
+
+	// Build the volume instance group jobs section
+	volumeHost := ""
+	volumeJobsSection := fmt.Sprintf(`  jobs:
+  - name: seaweedfs-volume
+    release: %s`,
+		b.config.BOSH.ReleaseName,
+	)
+
+	if canRouteRegister && s3RouteHost != "" {
+		volumeHost = fmt.Sprintf("seaweedfs-volume-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+		volumeJobsSection += natsRouteRegJobs
+		volumeJobsSection += fmt.Sprintf(`
+  properties:%s
+    route_registrar:
+      routes:
+      - name: seaweedfs-volume-ondemand
+        port: 8080
+        registration_interval: 20s
+        uris:
+        - %s`,
+			natsRouteRegProps,
+			volumeHost,
+		)
+	}
+
 	// Build the S3 instance group jobs section
 	s3JobsSection := fmt.Sprintf(`  jobs:
   - name: seaweedfs-s3
@@ -1267,9 +1331,7 @@ instance_groups:
   networks:
   - name: %s
   persistent_disk_type: %s
-  jobs:
-  - name: seaweedfs-volume
-    release: %s
+%s
 
 - name: seaweedfs-filer
   instances: %d
@@ -1279,9 +1341,7 @@ instance_groups:
   networks:
   - name: %s
   persistent_disk_type: %s
-  jobs:
-  - name: seaweedfs-filer
-    release: %s
+%s
 
 - name: seaweedfs-s3
   instances: 1
@@ -1307,13 +1367,13 @@ instance_groups:
 		toYAMLArray(cfg.AZs),
 		cfg.Network,
 		cfg.DiskType,
-		b.config.BOSH.ReleaseName,
+		volumeJobsSection,
 		cfg.FilerNodes,
 		cfg.VMType,
 		toYAMLArray(cfg.AZs),
 		cfg.Network,
 		cfg.DiskType,
-		b.config.BOSH.ReleaseName,
+		filerJobsSection,
 		cfg.VMType,
 		toYAMLArray(cfg.AZs),
 		cfg.Network,

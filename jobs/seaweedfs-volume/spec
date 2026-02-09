@@ -4,6 +4,7 @@ packages:
   - seaweedfs
 templates:
   ctl.erb: bin/ctl
+  pre-start.erb: bin/pre-start
   health_check.erb: bin/health_check
 
 consumes:
@@ -45,3 +46,6 @@ properties:
   seaweedfs.volume.read_mode:
     description: "Read mode: proxy or redirect"
     default: "proxy"
+  nats.tls.ca_cert:
+    description: "NATS server CA certificate. When set and route_registrar is co-located, this is written to the route_registrar config directory for TLS verification."
+    default: ""

@@ -4,6 +4,7 @@ packages:
   - seaweedfs
 templates:
   ctl.erb: bin/ctl
+  pre-start.erb: bin/pre-start
   filer.toml.erb: config/filer.toml
   health_check.erb: bin/health_check
 
@@ -64,3 +65,6 @@ properties:
   seaweedfs.filer.mysql.database:
     description: "MySQL database name"
     default: "seaweedfs"
+  nats.tls.ca_cert:
+    description: "NATS server CA certificate. When set and route_registrar is co-located, this is written to the route_registrar config directory for TLS verification."
+    default: ""
