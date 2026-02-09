@@ -4,6 +4,7 @@ packages:
   - seaweedfs
 templates:
   ctl.erb: bin/ctl
+  pre-start.erb: bin/pre-start
   health_check.erb: bin/health_check
 
 provides:
@@ -34,3 +35,6 @@ properties:
   seaweedfs.master.ip_bind:
     description: "IP address to bind to"
     default: "0.0.0.0"
+  nats.tls.ca_cert:
+    description: "NATS server CA certificate. When set and route_registrar is co-located, this is written to the route_registrar config directory for TLS verification."
+    default: ""

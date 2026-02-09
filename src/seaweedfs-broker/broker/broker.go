@@ -974,9 +974,11 @@ func (b *Broker) provisionDedicatedCluster(instance *store.ServiceInstance, plan
 	hasNATSConfig := b.config.NATS.TLS.Enabled && b.config.NATS.TLS.ClientCert != ""
 	if hasCFDeployment && hasNATSConfig {
 		s3RouteHost := fmt.Sprintf("seaweedfs-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+		masterConsoleHost := fmt.Sprintf("seaweedfs-console-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
 		instance.S3Endpoint = s3RouteHost
-		instance.ConsoleURL = fmt.Sprintf("https://%s", s3RouteHost)
+		instance.ConsoleURL = fmt.Sprintf("https://%s", masterConsoleHost)
 		log.Printf("Set S3Endpoint to gorouter route: %s", instance.S3Endpoint)
+		log.Printf("Set ConsoleURL to master route: %s", instance.ConsoleURL)
 	}
 
 	// Create the default bucket on the dedicated cluster using admin credentials
@@ -1105,6 +1107,89 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
   version: "latest"`, routingReleaseVersion)
 	}
 
+	// Generate NATS route_registrar YAML block (reused for master and S3 instance groups)
+	natsRouteRegJobs := ""
+	natsRouteRegProps := ""
+	if canRouteRegister {
+		// Use nats.service.cf.internal as the NATS hostname. This Consul-style DNS name:
+		// 1. Matches the NATS TLS certificate SANs (nats.service.cf.internal, *.nats.service.cf.internal)
+		// 2. Resolves on all VMs via BOSH DNS runtime config aliases
+		// 3. Avoids needing BOSH API access or IP addresses (which fail TLS verification)
+		natsHost := "nats.service.cf.internal"
+		natsPort := b.config.NATS.Port
+		if natsPort == 0 {
+			natsPort = 4224
+		}
+
+		natsMachinesYAML := fmt.Sprintf("\n      - %s", natsHost)
+
+		// Include NATS user/password if available (required for NATS authorization)
+		natsUserYAML := ""
+		if b.config.NATS.User != "" {
+			natsUserYAML = fmt.Sprintf("\n      user: %s\n      password: %s", b.config.NATS.User, b.config.NATS.Password)
+		}
+
+		natsRouteRegJobs = `
+  - name: route_registrar
+    release: routing
+    consumes:
+      nats: nil
+      nats-tls: nil
+  - name: bpm
+    release: bpm`
+
+		natsRouteRegProps = fmt.Sprintf(`
+    nats:
+      machines:%s
+      port: %d%s
+      tls:
+        enabled: true
+        client_cert: |
+%s
+        client_key: |
+%s
+        ca_cert: |
+%s`,
+			natsMachinesYAML,
+			natsPort,
+			natsUserYAML,
+			formatCertForYAML(b.config.NATS.TLS.ClientCert, 10),
+			formatCertForYAML(b.config.NATS.TLS.ClientKey, 10),
+			formatCertForYAML(b.config.NATS.TLS.CACert, 10),
+		)
+	}
+
+	// Build the master instance group jobs section
+	masterConsoleHost := ""
+	masterJobsSection := fmt.Sprintf(`  jobs:
+  - name: seaweedfs-master
+    release: %s
+    properties:
+      seaweedfs:
+        master:
+          port: 9333
+          default_replication: "%s"`,
+		b.config.BOSH.ReleaseName,
+		cfg.Replication,
+	)
+
+	if canRouteRegister && s3RouteHost != "" {
+		masterConsoleHost = fmt.Sprintf("seaweedfs-console-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+		masterJobsSection += natsRouteRegJobs
+		masterJobsSection += fmt.Sprintf(`
+  properties:%s
+    route_registrar:
+      routes:
+      - name: seaweedfs-console-ondemand
+        port: 9333
+        registration_interval: 20s
+        uris:
+        - %s`,
+			natsRouteRegProps,
+			masterConsoleHost,
+		)
+	}
+
 	// Build the S3 instance group jobs section
 	s3JobsSection := fmt.Sprintf(`  jobs:
   - name: seaweedfs-s3
@@ -1130,46 +1215,11 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 		instance.AdminSecretKey,
 	)
 
-	// Add route_registrar with property-based NATS config (no cross-deployment links needed)
+	// Add route_registrar to S3 instance group
 	if canRouteRegister && s3RouteHost != "" {
-		// Use nats.service.cf.internal as the NATS hostname. This Consul-style DNS name:
-		// 1. Matches the NATS TLS certificate SANs (nats.service.cf.internal, *.nats.service.cf.internal)
-		// 2. Resolves on all VMs via BOSH DNS runtime config aliases
-		// 3. Avoids needing BOSH API access or IP addresses (which fail TLS verification)
-		natsHost := "nats.service.cf.internal"
-		natsPort := b.config.NATS.Port
-		if natsPort == 0 {
-			natsPort = 4224
-		}
-
-		natsMachinesYAML := fmt.Sprintf("\n      - %s", natsHost)
-
-		// Include NATS user/password if available (required for NATS authorization)
-		natsUserYAML := ""
-		if b.config.NATS.User != "" {
-			natsUserYAML = fmt.Sprintf("\n      user: %s\n      password: %s", b.config.NATS.User, b.config.NATS.Password)
-		}
-
+		s3JobsSection += natsRouteRegJobs
 		s3JobsSection += fmt.Sprintf(`
-  - name: route_registrar
-    release: routing
-    consumes:
-      nats: nil
-      nats-tls: nil
-  - name: bpm
-    release: bpm
-  properties:
-    nats:
-      machines:%s
-      port: %d%s
-      tls:
-        enabled: true
-        client_cert: |
-%s
-        client_key: |
-%s
-        ca_cert: |
-%s
+  properties:%s
     route_registrar:
       routes:
       - name: seaweedfs-s3-ondemand
@@ -1177,12 +1227,7 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
         registration_interval: 20s
         uris:
         - %s`,
-			natsMachinesYAML,
-			natsPort,
-			natsUserYAML,
-			formatCertForYAML(b.config.NATS.TLS.ClientCert, 10),
-			formatCertForYAML(b.config.NATS.TLS.ClientKey, 10),
-			formatCertForYAML(b.config.NATS.TLS.CACert, 10),
+			natsRouteRegProps,
 			s3RouteHost,
 		)
 	}
@@ -1212,14 +1257,7 @@ instance_groups:
   networks:
   - name: %s
   persistent_disk_type: %s
-  jobs:
-  - name: seaweedfs-master
-    release: %s
-    properties:
-      seaweedfs:
-        master:
-          port: 9333
-          default_replication: "%s"
+%s
 
 - name: seaweedfs-volume
   instances: %d
@@ -1263,8 +1301,7 @@ instance_groups:
 		toYAMLArray(cfg.AZs),
 		cfg.Network,
 		cfg.DiskType,
-		b.config.BOSH.ReleaseName,
-		cfg.Replication,
+		masterJobsSection,
 		cfg.VolumeNodes,
 		cfg.VMType,
 		toYAMLArray(cfg.AZs),
