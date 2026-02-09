@@ -4,6 +4,7 @@
 #
 # This errand deploys a test application to Cloud Foundry, creates a SeaweedFS
 # service instance, binds it to the app, and validates S3 connectivity.
+# Optionally tests on-demand dedicated plans as well.
 #
 
 set -e
@@ -40,8 +41,15 @@ TIMEOUT_MINUTES="<%= p('smoke_tests.timeout_minutes') %>"
 CLEANUP="<%= p('smoke_tests.cleanup') %>"
 APP_DOMAIN="<%= p('smoke_tests.app_domain') %>"
 
+# On-demand plan test configuration
+TEST_ON_DEMAND="<%= p('smoke_tests.test_on_demand') %>"
+ON_DEMAND_PLAN_NAME="<%= p('smoke_tests.on_demand_plan_name') %>"
+ON_DEMAND_TIMEOUT_MINUTES="<%= p('smoke_tests.on_demand_timeout_minutes') %>"
+ON_DEMAND_DEPROVISION_TIMEOUT="<%= p('smoke_tests.on_demand_deprovision_timeout_minutes') %>"
+
 APP_NAME="seaweedfs-smoke-test"
 SERVICE_INSTANCE="seaweedfs-smoke-test-instance"
+ON_DEMAND_SERVICE_INSTANCE="seaweedfs-smoke-test-ondemand"
 
 # Cleanup function
 cleanup() {
@@ -53,22 +61,31 @@ cleanup() {
   if [ "${CLEANUP}" = "true" ]; then
     echo "Cleaning up test resources..."
 
-    # Unbind service
-    cf unbind-service ${APP_NAME} ${SERVICE_INSTANCE} 2>/dev/null || true
+    # Unbind and delete all service instances
+    for INST in ${SERVICE_INSTANCE} ${ON_DEMAND_SERVICE_INSTANCE}; do
+      cf unbind-service ${APP_NAME} ${INST} 2>/dev/null || true
+      cf delete-service ${INST} -f 2>/dev/null || true
+    done
 
     # Delete app
     cf delete ${APP_NAME} -f 2>/dev/null || true
 
-    # Delete service instance
-    cf delete-service ${SERVICE_INSTANCE} -f 2>/dev/null || true
+    # Wait for service instances to be deleted (handles async deprovision)
+    DEPROVISION_POLL_INTERVAL=10
+    DEPROVISION_MAX_ITERATIONS=$(( ${ON_DEMAND_DEPROVISION_TIMEOUT:-20} * 60 / DEPROVISION_POLL_INTERVAL ))
 
-    # Wait for service to be deleted
-    for i in $(seq 1 30); do
-      if ! cf service ${SERVICE_INSTANCE} >/dev/null 2>&1; then
-        break
-      fi
-      echo "Waiting for service instance deletion..."
-      sleep 5
+    for INST in ${SERVICE_INSTANCE} ${ON_DEMAND_SERVICE_INSTANCE}; do
+      for i in $(seq 1 ${DEPROVISION_MAX_ITERATIONS}); do
+        if ! cf service ${INST} >/dev/null 2>&1; then
+          echo "Service instance ${INST} deleted"
+          break
+        fi
+        if [ $((i % 6)) -eq 0 ]; then
+          STATUS=$(cf service ${INST} 2>&1 | grep -i "status:" | head -1 || echo "checking...")
+          echo "  Waiting for ${INST} deletion... ${STATUS}"
+        fi
+        sleep ${DEPROVISION_POLL_INTERVAL}
+      done
     done
 
     # Delete org (which also deletes space)
@@ -81,6 +98,9 @@ cleanup() {
     echo "  Space: ${CF_SPACE}"
     echo "  App: ${APP_NAME}"
     echo "  Service: ${SERVICE_INSTANCE}"
+    if [ "${TEST_ON_DEMAND}" = "true" ] && [ -n "${ON_DEMAND_PLAN_NAME}" ]; then
+      echo "  On-demand service: ${ON_DEMAND_SERVICE_INSTANCE}"
+    fi
   fi
 }
 
@@ -281,8 +301,8 @@ if [ "${APP_STARTED}" != "true" ]; then
 fi
 
 echo ""
-echo "Step 8: Run S3 connectivity tests"
-echo "----------------------------------"
+echo "Step 8: Run S3 connectivity tests (Shared Plan)"
+echo "-------------------------------------------------"
 
 APP_URL="https://${APP_NAME}.${APP_DOMAIN}"
 echo "Testing: ${APP_URL}/test"
@@ -301,16 +321,181 @@ if [ "${HTTP_CODE}" = "200" ]; then
   if echo "${RESPONSE}" | grep -q '"status"[: ]*"passed"'; then
     echo ""
     echo "========================================="
-    echo "SMOKE TEST PASSED"
+    echo "SHARED PLAN SMOKE TEST PASSED"
     echo "========================================="
     echo "All S3 operations completed successfully"
-    exit 0
   else
-    fail "Tests did not pass: ${RESPONSE}"
+    fail "Shared plan tests did not pass: ${RESPONSE}"
   fi
 else
   echo ""
   echo "App logs:"
   cf logs ${APP_NAME} --recent | tail -50
-  fail "Test endpoint returned HTTP ${HTTP_CODE}: ${RESPONSE}"
+  fail "Shared plan test endpoint returned HTTP ${HTTP_CODE}: ${RESPONSE}"
 fi
+
+# =========================================
+# On-Demand Dedicated Plan Test (Optional)
+# =========================================
+
+if [ "${TEST_ON_DEMAND}" = "true" ] && [ -n "${ON_DEMAND_PLAN_NAME}" ]; then
+  echo ""
+  echo "========================================="
+  echo "Step 9: Test On-Demand Dedicated Plan"
+  echo "========================================="
+  echo "Plan: ${ON_DEMAND_PLAN_NAME}"
+  echo "Timeout: ${ON_DEMAND_TIMEOUT_MINUTES} minutes"
+
+  # Verify on-demand plan exists in marketplace
+  if ! cf marketplace -e ${SERVICE_NAME} | grep -q "${ON_DEMAND_PLAN_NAME}"; then
+    fail "On-demand plan '${ON_DEMAND_PLAN_NAME}' not found for service '${SERVICE_NAME}'"
+  fi
+  echo "On-demand plan '${ON_DEMAND_PLAN_NAME}' found in marketplace"
+
+  echo ""
+  echo "Step 9a: Create on-demand service instance"
+  echo "--------------------------------------------"
+
+  # Delete existing on-demand service instance if present and wait for deletion
+  if cf service ${ON_DEMAND_SERVICE_INSTANCE} >/dev/null 2>&1; then
+    echo "Existing on-demand instance found, deleting..."
+    cf delete-service ${ON_DEMAND_SERVICE_INSTANCE} -f 2>/dev/null || true
+
+    # If the instance is stuck in a failed state, purge it
+    echo "Waiting for existing instance to be deleted..."
+    DELETE_TIMEOUT=60  # iterations (10s each = 10 minutes)
+    for i in $(seq 1 ${DELETE_TIMEOUT}); do
+      if ! cf service ${ON_DEMAND_SERVICE_INSTANCE} >/dev/null 2>&1; then
+        echo "Existing instance deleted"
+        break
+      fi
+
+      # Check if delete is stuck in failed state
+      DELETE_OUTPUT=$(cf service ${ON_DEMAND_SERVICE_INSTANCE} 2>&1)
+      if echo "${DELETE_OUTPUT}" | grep -qi "delete failed"; then
+        echo "Delete failed, purging service instance..."
+        cf purge-service-instance ${ON_DEMAND_SERVICE_INSTANCE} -f 2>/dev/null || true
+        sleep 5
+        break
+      fi
+
+      if [ $((i % 6)) -eq 0 ]; then
+        DELETE_STATUS=$(echo "${DELETE_OUTPUT}" | grep -i "status:" | head -1 || echo "checking...")
+        echo "  ${DELETE_STATUS}"
+      fi
+      sleep 10
+    done
+  fi
+
+  cf create-service ${SERVICE_NAME} ${ON_DEMAND_PLAN_NAME} ${ON_DEMAND_SERVICE_INSTANCE}
+
+  # Wait for on-demand service to be ready (BOSH deployment in progress)
+  echo "Waiting for on-demand service instance (BOSH deployment in progress)..."
+  SERVICE_READY=false
+  for i in $(seq 1 ${ON_DEMAND_TIMEOUT_MINUTES}); do
+    SERVICE_OUTPUT=$(cf service ${ON_DEMAND_SERVICE_INSTANCE} 2>&1)
+
+    if echo "${SERVICE_OUTPUT}" | grep -qi "create succeeded"; then
+      echo "On-demand service instance created successfully"
+      SERVICE_READY=true
+      break
+    elif echo "${SERVICE_OUTPUT}" | grep -qi "status:.*succeeded"; then
+      echo "On-demand service instance created successfully"
+      SERVICE_READY=true
+      break
+    elif echo "${SERVICE_OUTPUT}" | grep -qi "failed"; then
+      echo "Service output:"
+      echo "${SERVICE_OUTPUT}"
+      fail "On-demand service instance creation failed"
+    fi
+
+    CURRENT_STATUS=$(echo "${SERVICE_OUTPUT}" | grep -i "status:" | head -1 || echo "checking...")
+    echo "  ${CURRENT_STATUS} (attempt ${i}/${ON_DEMAND_TIMEOUT_MINUTES})"
+    sleep 60
+  done
+
+  if [ "${SERVICE_READY}" != "true" ]; then
+    echo "Final service status:"
+    cf service ${ON_DEMAND_SERVICE_INSTANCE}
+    fail "On-demand service instance creation timed out after ${ON_DEMAND_TIMEOUT_MINUTES} minutes"
+  fi
+
+  echo ""
+  echo "Step 9b: Bind on-demand service and restage app"
+  echo "-------------------------------------------------"
+
+  # Unbind shared service first so VCAP_SERVICES has only the on-demand binding
+  cf unbind-service ${APP_NAME} ${SERVICE_INSTANCE} 2>/dev/null || true
+
+  # Bind on-demand service
+  cf bind-service ${APP_NAME} ${ON_DEMAND_SERVICE_INSTANCE}
+  echo "On-demand service bound successfully"
+
+  # Restage to pick up new VCAP_SERVICES
+  echo "Restaging app with on-demand service binding..."
+  if ! cf restage ${APP_NAME}; then
+    echo "App restage failed. Getting logs..."
+    cf logs ${APP_NAME} --recent || true
+    fail "Application failed to restage with on-demand binding"
+  fi
+
+  # Wait for app to be running
+  echo "Waiting for application to restart..."
+  APP_STARTED=false
+  for i in $(seq 1 30); do
+    APP_OUTPUT=$(cf app ${APP_NAME} 2>&1)
+    if echo "${APP_OUTPUT}" | grep -qE "instances:.*[1-9]+/[0-9]+.*running|#0.*running"; then
+      APP_STARTED=true
+      break
+    fi
+    if echo "${APP_OUTPUT}" | grep -qiE "^state:.*started|requested state:.*started"; then
+      APP_STARTED=true
+      break
+    fi
+    sleep 10
+  done
+
+  if [ "${APP_STARTED}" != "true" ]; then
+    cf app ${APP_NAME}
+    cf logs ${APP_NAME} --recent
+    fail "Application failed to restart after on-demand binding"
+  fi
+
+  sleep 10
+
+  echo ""
+  echo "Step 9c: Run S3 connectivity tests (Dedicated Cluster)"
+  echo "--------------------------------------------------------"
+
+  RESPONSE=$(curl -sk "${APP_URL}/test" 2>&1)
+  HTTP_CODE=$(curl -sk -o /dev/null -w '%{http_code}' "${APP_URL}/test" 2>&1)
+
+  echo "Response (HTTP ${HTTP_CODE}):"
+  echo "${RESPONSE}" | python3 -m json.tool 2>/dev/null || echo "${RESPONSE}"
+
+  if [ "${HTTP_CODE}" = "200" ]; then
+    if echo "${RESPONSE}" | grep -q '"status"[: ]*"passed"'; then
+      echo ""
+      echo "========================================="
+      echo "ON-DEMAND PLAN SMOKE TEST PASSED"
+      echo "========================================="
+    else
+      fail "On-demand plan tests did not pass: ${RESPONSE}"
+    fi
+  else
+    cf logs ${APP_NAME} --recent | tail -50
+    fail "On-demand plan test endpoint returned HTTP ${HTTP_CODE}: ${RESPONSE}"
+  fi
+fi
+
+# Final summary
+echo ""
+echo "========================================="
+echo "SMOKE TEST SUMMARY"
+echo "========================================="
+echo "Shared plan (${PLAN_NAME}): PASSED"
+if [ "${TEST_ON_DEMAND}" = "true" ] && [ -n "${ON_DEMAND_PLAN_NAME}" ]; then
+  echo "On-demand plan (${ON_DEMAND_PLAN_NAME}): PASSED"
+fi
+echo "All smoke tests completed successfully"
+exit 0

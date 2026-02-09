@@ -3,6 +3,7 @@ package broker
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -106,6 +107,9 @@ func (b *Broker) Router() http.Handler {
 	// Health check endpoint (no auth required)
 	r.HandleFunc("/health", b.healthHandler).Methods("GET")
 
+	// Icon endpoint (no auth required) - serves marketplace icon
+	r.HandleFunc("/icon.png", b.iconHandler).Methods("GET")
+
 	// OSB API endpoints
 	api := r.PathPrefix("/v2").Subrouter()
 	api.Use(b.authMiddleware)
@@ -154,6 +158,13 @@ func (b *Broker) osbVersionMiddleware(next http.Handler) http.Handler {
 func (b *Broker) healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (b *Broker) iconHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.WriteHeader(http.StatusOK)
+	w.Write(iconPNG)
 }
 
 func (b *Broker) catalogHandler(w http.ResponseWriter, r *http.Request) {
@@ -401,14 +412,32 @@ func (b *Broker) bindHandler(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:  time.Now(),
 	}
 
-	// For dedicated clusters, pre-generate credentials (they go in the deployment manifest)
-	// For shared clusters, createS3Credentials will generate them via IAM API
-	if instance.DeploymentName != "" {
-		binding.AccessKey = generateAccessKey()
-		binding.SecretKey = generateSecretKey()
+	// For dedicated clusters, ensure the bucket exists before creating credentials
+	if instance.DeploymentName != "" && instance.IAMEndpoint != "" && instance.BucketName != "" {
+		dedicatedS3, err := minio.New(instance.IAMEndpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(instance.AdminAccessKey, instance.AdminSecretKey, ""),
+			Secure: false,
+			Region: b.config.SharedCluster.Region,
+		})
+		if err != nil {
+			log.Printf("Binding %s: Warning: could not create S3 client for bucket check: %v", bindingID, err)
+		} else {
+			ctx := context.Background()
+			exists, err := dedicatedS3.BucketExists(ctx, instance.BucketName)
+			if err != nil {
+				log.Printf("Binding %s: Warning: could not check bucket existence: %v", bindingID, err)
+			} else if !exists {
+				log.Printf("Binding %s: Creating bucket %s on dedicated cluster", bindingID, instance.BucketName)
+				if err := dedicatedS3.MakeBucket(ctx, instance.BucketName, minio.MakeBucketOptions{
+					Region: b.config.SharedCluster.Region,
+				}); err != nil {
+					log.Printf("Binding %s: Warning: could not create bucket: %v", bindingID, err)
+				}
+			}
+		}
 	}
 
-	// Create S3 credentials on the cluster (for shared clusters, this calls IAM API)
+	// Create per-binding IAM credentials (for both shared and dedicated clusters)
 	if err := b.createS3Credentials(instance, binding); err != nil {
 		b.writeError(w, http.StatusInternalServerError, "BindError", err.Error())
 		return
@@ -550,6 +579,12 @@ func (b *Broker) buildCatalog() map[string]any {
 			plans = append(plans, planData)
 		}
 
+		// Use embedded icon as data URI if no external imageUrl configured
+		imageURL := svc.Metadata.ImageURL
+		if imageURL == "" && len(iconPNG) > 0 {
+			imageURL = "data:image/png;base64," + base64.StdEncoding.EncodeToString(iconPNG)
+		}
+
 		serviceData := map[string]any{
 			"id":                    svc.ID,
 			"name":                  svc.Name,
@@ -562,7 +597,7 @@ func (b *Broker) buildCatalog() map[string]any {
 			"tags":                  svc.Tags,
 			"metadata": map[string]any{
 				"displayName":         svc.Metadata.DisplayName,
-				"imageUrl":            svc.Metadata.ImageURL,
+				"imageUrl":            imageURL,
 				"longDescription":     svc.Metadata.LongDescription,
 				"providerDisplayName": svc.Metadata.ProviderDisplayName,
 				"documentationUrl":    svc.Metadata.DocumentationURL,
@@ -583,10 +618,13 @@ func (b *Broker) buildCredentials(instance *store.ServiceInstance, binding *stor
 	var useSSL bool
 
 	if instance.DeploymentName != "" {
-		// Dedicated cluster
+		// Dedicated cluster - direct IP:port has no TLS, gorouter hostnames do
 		endpoint = instance.S3Endpoint
 		bucket = instance.BucketName
-		useSSL = true
+		useSSL = !strings.Contains(endpoint, ":8333")
+		if endpoint == "" {
+			log.Printf("WARNING: Building credentials for dedicated cluster %s but S3Endpoint is empty!", instance.DeploymentName)
+		}
 	} else {
 		// Shared cluster
 		endpoint = b.config.SharedCluster.S3Endpoint
@@ -637,6 +675,14 @@ func generateSecretKey() string {
 	bytes := make([]byte, 20)
 	rand.Read(bytes)
 	return hex.EncodeToString(bytes)
+}
+
+func getMapKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 // Request/Response types
@@ -719,37 +765,44 @@ func (b *Broker) deprovisionSharedBucket(instance *store.ServiceInstance) error 
 }
 
 func (b *Broker) createS3Credentials(instance *store.ServiceInstance, binding *store.ServiceBinding) error {
-	// For dedicated clusters, credentials are managed in the deployment manifest
+	// Determine which IAM client to use
+	var iamClient *iam.Client
+
 	if instance.DeploymentName != "" {
-		log.Printf("Binding %s: Using dedicated cluster credentials for instance %s", binding.ID, instance.ID)
-		return nil
+		// Dedicated cluster: create IAM client for the on-demand cluster
+		iamEndpoint := instance.IAMEndpoint
+		if iamEndpoint == "" {
+			// Fall back to admin credentials without per-binding IAM
+			log.Printf("Binding %s: No IAM endpoint for dedicated cluster %s, using admin credentials", binding.ID, instance.DeploymentName)
+			binding.AccessKey = instance.AdminAccessKey
+			binding.SecretKey = instance.AdminSecretKey
+			return nil
+		}
+		iamClient = iam.NewClient(iamEndpoint, instance.AdminAccessKey, instance.AdminSecretKey, b.config.SharedCluster.Region, false)
+		log.Printf("Binding %s: Created IAM client for dedicated cluster at %s", binding.ID, iamEndpoint)
+	} else {
+		// Shared cluster: use the pre-configured IAM client
+		if b.iamClient == nil {
+			return fmt.Errorf("IAM client not initialized - cannot create per-binding credentials")
+		}
+		iamClient = b.iamClient
 	}
 
-	// For shared clusters, use the IAM API to create dedicated credentials per binding
-	if b.iamClient == nil {
-		return fmt.Errorf("IAM client not initialized - cannot create per-binding credentials")
-	}
-
-	// Create an IAM user name based on the binding ID (sanitized for IAM)
-	// Format: cf-binding-<first 16 chars of binding ID>
+	// Create per-binding IAM credentials (same flow for shared and dedicated)
 	userName := fmt.Sprintf("cf-binding-%s", binding.ID[:min(len(binding.ID), 16)])
-
 	log.Printf("Binding %s: Creating IAM user %s via SeaweedFS IAM API", binding.ID, userName)
 
-	// Create the IAM user first
-	if err := b.iamClient.CreateUser(userName); err != nil {
+	if err := iamClient.CreateUser(userName); err != nil {
 		log.Printf("Binding %s: IAM CreateUser failed: %v", binding.ID, err)
 		return fmt.Errorf("failed to create IAM user: %w", err)
 	}
 
-	// Create access key for the user
-	accessKey, err := b.iamClient.CreateAccessKey(userName)
+	accessKey, err := iamClient.CreateAccessKey(userName)
 	if err != nil {
 		log.Printf("Binding %s: IAM CreateAccessKey failed: %v", binding.ID, err)
 		return fmt.Errorf("failed to create S3 credentials via IAM API: %w", err)
 	}
 
-	// Store the IAM user name and credentials
 	binding.IAMUserName = userName
 	binding.AccessKey = accessKey.AccessKeyID
 	binding.SecretKey = accessKey.SecretAccessKey
@@ -758,10 +811,8 @@ func (b *Broker) createS3Credentials(instance *store.ServiceInstance, binding *s
 		binding.ID, userName, accessKey.AccessKeyID)
 
 	// Optionally attach a policy to restrict access to only this binding's bucket
-	// Note: SeaweedFS policy support may be limited
 	policyName := fmt.Sprintf("bucket-access-%s", binding.ID[:min(len(binding.ID), 8)])
-	if err := b.iamClient.PutUserPolicy(userName, policyName, instance.BucketName); err != nil {
-		// Policy attachment is optional - log but don't fail
+	if err := iamClient.PutUserPolicy(userName, policyName, instance.BucketName); err != nil {
 		log.Printf("Warning: Could not attach bucket policy for user %s: %v", userName, err)
 	}
 
@@ -769,35 +820,44 @@ func (b *Broker) createS3Credentials(instance *store.ServiceInstance, binding *s
 }
 
 func (b *Broker) deleteS3Credentials(instance *store.ServiceInstance, binding *store.ServiceBinding) error {
-	// For dedicated clusters, credentials are managed in the deployment manifest
-	if instance.DeploymentName != "" {
-		log.Printf("Binding %s: Dedicated cluster credentials will be removed with deployment", binding.ID)
+	if binding.IAMUserName == "" {
+		log.Printf("Binding %s: No IAM credentials to delete", binding.ID)
 		return nil
 	}
 
-	// For shared clusters, delete the IAM credentials
-	if b.iamClient == nil || binding.IAMUserName == "" {
-		log.Printf("Binding %s: No IAM credentials to delete", binding.ID)
-		return nil
+	// Determine which IAM client to use
+	var iamClient *iam.Client
+
+	if instance.DeploymentName != "" {
+		iamEndpoint := instance.IAMEndpoint
+		if iamEndpoint == "" {
+			log.Printf("Binding %s: No IAM endpoint for dedicated cluster, skipping credential cleanup", binding.ID)
+			return nil
+		}
+		iamClient = iam.NewClient(iamEndpoint, instance.AdminAccessKey, instance.AdminSecretKey, b.config.SharedCluster.Region, false)
+	} else {
+		if b.iamClient == nil {
+			log.Printf("Binding %s: No IAM client available for cleanup", binding.ID)
+			return nil
+		}
+		iamClient = b.iamClient
 	}
 
 	log.Printf("Binding %s: Deleting IAM credentials for user %s", binding.ID, binding.IAMUserName)
 
 	// Delete the user policy first (best effort)
 	policyName := fmt.Sprintf("bucket-access-%s", binding.ID[:min(len(binding.ID), 8)])
-	if err := b.iamClient.DeleteUserPolicy(binding.IAMUserName, policyName); err != nil {
+	if err := iamClient.DeleteUserPolicy(binding.IAMUserName, policyName); err != nil {
 		log.Printf("Warning: Could not delete user policy: %v", err)
 	}
 
-	// Delete the access key
 	if binding.AccessKey != "" {
-		if err := b.iamClient.DeleteAccessKey(binding.IAMUserName, binding.AccessKey); err != nil {
+		if err := iamClient.DeleteAccessKey(binding.IAMUserName, binding.AccessKey); err != nil {
 			log.Printf("Warning: Could not delete access key %s: %v", binding.AccessKey, err)
 		}
 	}
 
-	// Delete the IAM user
-	if err := b.iamClient.DeleteUser(binding.IAMUserName); err != nil {
+	if err := iamClient.DeleteUser(binding.IAMUserName); err != nil {
 		log.Printf("Warning: Could not delete IAM user %s: %v", binding.IAMUserName, err)
 	}
 
@@ -816,8 +876,32 @@ func (b *Broker) provisionDedicatedCluster(instance *store.ServiceInstance, plan
 	deploymentName := fmt.Sprintf("%s-%s", b.config.BOSH.DeploymentPrefix, instance.ID[:8])
 	instance.DeploymentName = deploymentName
 
+	// Generate admin credentials before manifest so they are included in the deployment
+	instance.AdminAccessKey = generateAccessKey()
+	instance.AdminSecretKey = generateSecretKey()
+	instance.BucketName = "default"
+
+	// Use AZs from plan config (passed from tile's availability_zone_names).
+	// Fall back to BOSH cloud config discovery if plan AZs are empty.
+	if plan.DedicatedConfig != nil {
+		if len(plan.DedicatedConfig.AZs) > 0 {
+			log.Printf("Using configured AZs for network %s: %v", plan.DedicatedConfig.Network, plan.DedicatedConfig.AZs)
+		} else if plan.DedicatedConfig.Network != "" {
+			log.Printf("No AZs configured, attempting to discover from BOSH cloud config for network %s", plan.DedicatedConfig.Network)
+			azs, err := b.boshClient.GetCloudConfigAZsForNetwork(plan.DedicatedConfig.Network)
+			if err != nil {
+				log.Printf("Warning: could not discover AZs from cloud config: %v, using fallback [z1]", err)
+				plan.DedicatedConfig.AZs = []string{"z1"}
+			} else {
+				log.Printf("Discovered AZs for network %s: %v", plan.DedicatedConfig.Network, azs)
+				plan.DedicatedConfig.AZs = azs
+			}
+		}
+	}
+
 	// Generate manifest
 	manifest := b.generateDedicatedManifest(instance, plan)
+	log.Printf("Generated manifest for deployment %s:\n%s", deploymentName, string(manifest))
 
 	// Deploy
 	task, err := b.boshClient.Deploy(manifest)
@@ -840,32 +924,88 @@ func (b *Broker) provisionDedicatedCluster(instance *store.ServiceInstance, plan
 		return
 	}
 
-	// Get deployment info to find endpoints
+	// Discover S3 VM internal endpoint for IAM operations
+	hasCFDeployment := b.config.CF.DeploymentName != "" && b.config.CF.SystemDomain != ""
 	vms, err := b.boshClient.GetDeploymentVMs(deploymentName)
 	if err != nil {
-		log.Printf("Warning: could not get deployment VMs: %v", err)
+		log.Printf("Warning: could not get deployment VMs for %s: %v", deploymentName, err)
 	} else {
-		for _, vm := range vms {
-			if job, ok := vm["job"].(string); ok && job == "seaweedfs-s3" {
-				// Prefer DNS name over IP address for stable addressing
+		log.Printf("Got %d VMs for deployment %s", len(vms), deploymentName)
+		for i, vm := range vms {
+			jobName := ""
+			if j, ok := vm["job_name"].(string); ok && j != "" {
+				jobName = j
+			} else if j, ok := vm["job"].(string); ok && j != "" {
+				jobName = j
+			} else if inst, ok := vm["instance"].(string); ok && inst != "" {
+				if idx := strings.Index(inst, "/"); idx > 0 {
+					jobName = inst[:idx]
+				}
+			}
+
+			if i == 0 {
+				log.Printf("VM fields available: %v", getMapKeys(vm))
+			}
+			log.Printf("VM %d: jobName=%s, instance=%v, dns=%v, ips=%v", i, jobName, vm["instance"], vm["dns"], vm["ips"])
+
+			if jobName == "seaweedfs-s3" {
+				// Always capture internal endpoint for IAM operations (IP-based, no TLS)
+				if ips, ok := vm["ips"].([]any); ok && len(ips) > 0 {
+					instance.IAMEndpoint = fmt.Sprintf("%v:8333", ips[0])
+					log.Printf("Set IAMEndpoint from IP: %s", instance.IAMEndpoint)
+				}
+				// Set S3Endpoint for bindings - prefer DNS for stable addressing
 				if dns, ok := vm["dns"].([]any); ok && len(dns) > 0 {
 					instance.S3Endpoint = fmt.Sprintf("%v:8333", dns[0])
+					log.Printf("Set S3Endpoint from DNS: %s", instance.S3Endpoint)
 				} else if ips, ok := vm["ips"].([]any); ok && len(ips) > 0 {
-					// Fall back to IP if DNS not available
 					instance.S3Endpoint = fmt.Sprintf("%v:8333", ips[0])
+					log.Printf("Set S3Endpoint from IP: %s", instance.S3Endpoint)
 				}
 			}
 		}
+		if instance.S3Endpoint == "" {
+			log.Printf("Warning: No seaweedfs-s3 job found in deployment VMs")
+		}
 	}
 
-	// Generate admin credentials
-	instance.AdminAccessKey = generateAccessKey()
-	instance.AdminSecretKey = generateSecretKey()
-	instance.BucketName = "default"
+	// If route_registrar was configured (requires both CF deployment and NATS config),
+	// use the gorouter hostname as the S3 endpoint
+	hasNATSConfig := b.config.NATS.TLS.Enabled && b.config.NATS.TLS.ClientCert != ""
+	if hasCFDeployment && hasNATSConfig {
+		s3RouteHost := fmt.Sprintf("seaweedfs-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+		instance.S3Endpoint = s3RouteHost
+		instance.ConsoleURL = fmt.Sprintf("https://%s", s3RouteHost)
+		log.Printf("Set S3Endpoint to gorouter route: %s", instance.S3Endpoint)
+	}
 
-	// Generate console URL for dedicated cluster
-	if b.config.CF.SystemDomain != "" {
-		instance.ConsoleURL = fmt.Sprintf("https://seaweedfs-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+	// Create the default bucket on the dedicated cluster using admin credentials
+	if instance.IAMEndpoint != "" {
+		log.Printf("Creating default bucket on dedicated cluster at %s", instance.IAMEndpoint)
+		dedicatedS3, err := minio.New(instance.IAMEndpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(instance.AdminAccessKey, instance.AdminSecretKey, ""),
+			Secure: false,
+			Region: b.config.SharedCluster.Region,
+		})
+		if err != nil {
+			log.Printf("Warning: could not create S3 client for dedicated cluster: %v", err)
+		} else {
+			ctx := context.Background()
+			err = dedicatedS3.MakeBucket(ctx, instance.BucketName, minio.MakeBucketOptions{
+				Region: b.config.SharedCluster.Region,
+			})
+			if err != nil {
+				// Check if bucket already exists
+				exists, existErr := dedicatedS3.BucketExists(ctx, instance.BucketName)
+				if existErr != nil || !exists {
+					log.Printf("Warning: could not create default bucket: %v", err)
+				} else {
+					log.Printf("Default bucket %s already exists", instance.BucketName)
+				}
+			} else {
+				log.Printf("Created default bucket %s on dedicated cluster", instance.BucketName)
+			}
+		}
 	}
 
 	instance.State = "succeeded"
@@ -877,6 +1017,19 @@ func (b *Broker) provisionDedicatedCluster(instance *store.ServiceInstance, plan
 
 func (b *Broker) deprovisionDedicatedCluster(instance *store.ServiceInstance) {
 	if b.boshClient == nil || instance.DeploymentName == "" {
+		b.store.DeleteInstance(instance.ID)
+		return
+	}
+
+	// Check if the deployment actually exists before trying to delete it
+	deployment, err := b.boshClient.GetDeployment(instance.DeploymentName)
+	if err != nil {
+		log.Printf("Warning: could not check deployment %s: %v", instance.DeploymentName, err)
+	}
+
+	if deployment == nil {
+		// Deployment doesn't exist (never created or already deleted) - just clean up state
+		log.Printf("Deployment %s does not exist, cleaning up broker state", instance.DeploymentName)
 		b.store.DeleteInstance(instance.ID)
 		return
 	}
@@ -919,39 +1072,124 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 		cfg.Replication = "001"
 	}
 
-	// Generate console route hostname
-	consoleHostname := ""
-	routeRegistrarSection := ""
-	additionalReleases := ""
-	if b.config.CF.SystemDomain != "" {
-		consoleHostname = fmt.Sprintf("seaweedfs-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
-		// Note: Route registration for on-demand instances requires network access to NATS
-		// and the routing release to be uploaded to the BOSH director.
-		// The nats-tls link must be available from the TAS deployment.
-		additionalReleases = `- name: routing
-  version: latest`
-		routeRegistrarSection = fmt.Sprintf(`  - name: route_registrar
+	// Check if we can set up route registration via property-based NATS config
+	hasCFDeployment := b.config.CF.DeploymentName != "" && b.config.CF.SystemDomain != ""
+	hasNATSConfig := b.config.NATS.TLS.Enabled && b.config.NATS.TLS.ClientCert != "" && len(b.config.NATS.Machines) > 0
+	canRouteRegister := hasCFDeployment && hasNATSConfig
+
+	// Generate the S3 route hostname for this instance
+	s3RouteHost := ""
+	if canRouteRegister {
+		s3RouteHost = fmt.Sprintf("seaweedfs-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+	}
+
+	// Build releases section
+	routingReleaseVersion := b.config.BOSH.RoutingReleaseVersion
+	if routingReleaseVersion == "" {
+		routingReleaseVersion = "latest"
+	}
+
+	releasesSection := fmt.Sprintf(`releases:
+- name: %s
+  version: "%s"`,
+		b.config.BOSH.ReleaseName,
+		b.config.BOSH.ReleaseVersion,
+	)
+
+	// Add routing and bpm releases if we have NATS config for route registration
+	if canRouteRegister {
+		releasesSection += fmt.Sprintf(`
+- name: routing
+  version: "%s"
+- name: bpm
+  version: "latest"`, routingReleaseVersion)
+	}
+
+	// Build the S3 instance group jobs section
+	s3JobsSection := fmt.Sprintf(`  jobs:
+  - name: seaweedfs-s3
+    release: %s
+    properties:
+      seaweedfs:
+        s3:
+          iam:
+            enabled: true
+          config:
+            enabled: true
+            identities:
+            - name: admin
+              credentials:
+              - accessKey: %s
+                secretKey: %s
+              actions:
+              - Admin
+              - Read
+              - Write`,
+		b.config.BOSH.ReleaseName,
+		instance.AdminAccessKey,
+		instance.AdminSecretKey,
+	)
+
+	// Add route_registrar with property-based NATS config (no cross-deployment links needed)
+	if canRouteRegister && s3RouteHost != "" {
+		// Use nats.service.cf.internal as the NATS hostname. This Consul-style DNS name:
+		// 1. Matches the NATS TLS certificate SANs (nats.service.cf.internal, *.nats.service.cf.internal)
+		// 2. Resolves on all VMs via BOSH DNS runtime config aliases
+		// 3. Avoids needing BOSH API access or IP addresses (which fail TLS verification)
+		natsHost := "nats.service.cf.internal"
+		natsPort := b.config.NATS.Port
+		if natsPort == 0 {
+			natsPort = 4224
+		}
+
+		natsMachinesYAML := fmt.Sprintf("\n      - %s", natsHost)
+
+		// Include NATS user/password if available (required for NATS authorization)
+		natsUserYAML := ""
+		if b.config.NATS.User != "" {
+			natsUserYAML = fmt.Sprintf("\n      user: %s\n      password: %s", b.config.NATS.User, b.config.NATS.Password)
+		}
+
+		s3JobsSection += fmt.Sprintf(`
+  - name: route_registrar
     release: routing
     consumes:
-      nats-tls:
-        from: nats-tls
-        deployment: cf
-    properties:
-      route_registrar:
-        routes:
-        - name: seaweedfs-master-console
-          port: 9333
-          registration_interval: 20s
-          uris:
-          - %s`, consoleHostname)
+      nats: nil
+      nats-tls: nil
+  - name: bpm
+    release: bpm
+  properties:
+    nats:
+      machines:%s
+      port: %d%s
+      tls:
+        enabled: true
+        client_cert: |
+%s
+        client_key: |
+%s
+        ca_cert: |
+%s
+    route_registrar:
+      routes:
+      - name: seaweedfs-s3-ondemand
+        port: 8333
+        registration_interval: 20s
+        uris:
+        - %s`,
+			natsMachinesYAML,
+			natsPort,
+			natsUserYAML,
+			formatCertForYAML(b.config.NATS.TLS.ClientCert, 10),
+			formatCertForYAML(b.config.NATS.TLS.ClientKey, 10),
+			formatCertForYAML(b.config.NATS.TLS.CACert, 10),
+			s3RouteHost,
+		)
 	}
 
 	manifest := fmt.Sprintf(`---
 name: %s
 
-releases:
-- name: %s
-  version: "%s"
 %s
 
 stemcells:
@@ -982,7 +1220,6 @@ instance_groups:
         master:
           port: 9333
           default_replication: "%s"
-%s
 
 - name: seaweedfs-volume
   instances: %d
@@ -995,10 +1232,6 @@ instance_groups:
   jobs:
   - name: seaweedfs-volume
     release: %s
-    properties:
-      seaweedfs:
-        volume:
-          master: "((seaweedfs_master_address)):9333"
 
 - name: seaweedfs-filer
   instances: %d
@@ -1011,10 +1244,6 @@ instance_groups:
   jobs:
   - name: seaweedfs-filer
     release: %s
-    properties:
-      seaweedfs:
-        filer:
-          master: "((seaweedfs_master_address)):9333"
 
 - name: seaweedfs-s3
   instances: 1
@@ -1023,34 +1252,10 @@ instance_groups:
   azs: %s
   networks:
   - name: %s
-  jobs:
-  - name: seaweedfs-s3
-    release: %s
-    properties:
-      seaweedfs:
-        s3:
-          filer: "((seaweedfs_filer_address)):8888"
-          config:
-            enabled: true
-            identities:
-            - name: admin
-              access_key: %s
-              secret_key: %s
-              actions:
-              - Admin
-              - Read
-              - Write
-
-variables:
-- name: seaweedfs_master_address
-  type: certificate
-- name: seaweedfs_filer_address
-  type: certificate
+%s
 `,
 		instance.DeploymentName,
-		b.config.BOSH.ReleaseName,
-		b.config.BOSH.ReleaseVersion,
-		additionalReleases,
+		releasesSection,
 		b.config.BOSH.StemcellOS,
 		b.config.BOSH.StemcellVersion,
 		cfg.MasterNodes,
@@ -1060,7 +1265,6 @@ variables:
 		cfg.DiskType,
 		b.config.BOSH.ReleaseName,
 		cfg.Replication,
-		routeRegistrarSection,
 		cfg.VolumeNodes,
 		cfg.VMType,
 		toYAMLArray(cfg.AZs),
@@ -1076,9 +1280,7 @@ variables:
 		cfg.VMType,
 		toYAMLArray(cfg.AZs),
 		cfg.Network,
-		b.config.BOSH.ReleaseName,
-		instance.AdminAccessKey,
-		instance.AdminSecretKey,
+		s3JobsSection,
 	)
 
 	return []byte(manifest)
@@ -1090,3 +1292,15 @@ func toYAMLArray(items []string) string {
 	}
 	return fmt.Sprintf("[%s]", strings.Join(items, ", "))
 }
+
+// formatCertForYAML indents a PEM certificate for embedding in YAML block scalar format.
+// Each line of the cert will be prefixed with the specified number of spaces.
+func formatCertForYAML(cert string, indent int) string {
+	prefix := strings.Repeat(" ", indent)
+	lines := strings.Split(strings.TrimSpace(cert), "\n")
+	for i, line := range lines {
+		lines[i] = prefix + line
+	}
+	return strings.Join(lines, "\n")
+}
+

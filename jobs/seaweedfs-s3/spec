@@ -4,6 +4,7 @@ packages:
   - seaweedfs
 templates:
   ctl.erb: bin/ctl
+  pre-start.erb: bin/pre-start
   s3.json.erb: config/s3.json
   tls_cert.pem.erb: config/certs/tls_cert.pem
   tls_key.pem.erb: config/certs/tls_key.pem
@@ -60,6 +61,11 @@ properties:
   seaweedfs.s3.iam.enabled:
     description: "Enable IAM API for dynamic credential management"
     default: true
+
+  # NATS CA cert for co-located route_registrar (on-demand deployments)
+  nats.tls.ca_cert:
+    description: "NATS server CA certificate. When set and route_registrar is co-located, this is written to the route_registrar config directory for TLS verification."
+    default: ""
 
   seaweedfs.s3.config.identities:
     description: "List of S3 identities with credentials"

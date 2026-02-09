@@ -32,14 +32,18 @@ type Config struct {
 	// Cloud Foundry configuration
 	CF CFConfig `yaml:"cf"`
 
+	// NATS configuration for on-demand route registration
+	NATS NATSConfig `yaml:"nats"`
+
 	// State store configuration
 	StateStore StateStoreConfig `yaml:"state_store"`
 }
 
 // CFConfig holds Cloud Foundry configuration
 type CFConfig struct {
-	SystemDomain string `yaml:"system_domain"`
-	AppsDomain   string `yaml:"apps_domain"`
+	SystemDomain   string `yaml:"system_domain"`
+	AppsDomain     string `yaml:"apps_domain"`
+	DeploymentName string `yaml:"deployment_name"`
 }
 
 // AuthConfig holds authentication credentials
@@ -136,11 +140,29 @@ type BOSHConfig struct {
 	Authentication BOSHAuthentication `yaml:"authentication"`
 
 	// Deployment template configuration
-	DeploymentPrefix string `yaml:"deployment_prefix"`
-	ReleaseName      string `yaml:"release_name"`
-	ReleaseVersion   string `yaml:"release_version"`
-	StemcellOS       string `yaml:"stemcell_os"`
-	StemcellVersion  string `yaml:"stemcell_version"`
+	DeploymentPrefix      string `yaml:"deployment_prefix"`
+	ReleaseName           string `yaml:"release_name"`
+	ReleaseVersion        string `yaml:"release_version"`
+	StemcellOS            string `yaml:"stemcell_os"`
+	StemcellVersion       string `yaml:"stemcell_version"`
+	RoutingReleaseVersion string `yaml:"routing_release_version"`
+}
+
+// NATSConfig holds NATS configuration for on-demand route registration
+type NATSConfig struct {
+	Machines []string      `yaml:"machines"`
+	Port     int           `yaml:"port"`
+	User     string        `yaml:"user"`
+	Password string        `yaml:"password"`
+	TLS      NATSTLSConfig `yaml:"tls"`
+}
+
+// NATSTLSConfig holds NATS TLS settings
+type NATSTLSConfig struct {
+	Enabled    bool   `yaml:"enabled"`
+	ClientCert string `yaml:"client_cert"`
+	ClientKey  string `yaml:"client_key"`
+	CACert     string `yaml:"ca_cert"`
 }
 
 // BOSHAuthentication holds BOSH authentication configuration

@@ -44,3 +44,16 @@ properties:
   smoke_tests.app_domain:
     description: "Apps domain for the test app"
     default: ""
+
+  smoke_tests.test_on_demand:
+    description: "Whether to also test an on-demand dedicated plan after the shared plan test"
+    default: false
+  smoke_tests.on_demand_plan_name:
+    description: "Name of the on-demand plan to test (must match a configured plan name)"
+    default: ""
+  smoke_tests.on_demand_timeout_minutes:
+    description: "Timeout in minutes for on-demand service creation (BOSH deployments take 15-30+ minutes)"
+    default: 30
+  smoke_tests.on_demand_deprovision_timeout_minutes:
+    description: "Timeout in minutes for on-demand service deletion"
+    default: 20

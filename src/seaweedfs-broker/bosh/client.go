@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cloudfoundry/seaweedfs-broker/config"
+	"gopkg.in/yaml.v3"
 )
 
 // Client is a BOSH director API client
@@ -22,16 +23,6 @@ type Client struct {
 	tokenExpiry time.Time
 	clientID    string
 	clientSecret string
-}
-
-// DeploymentManifest represents a BOSH deployment manifest
-type DeploymentManifest struct {
-	Name           string          `yaml:"name"`
-	Releases       []Release       `yaml:"releases"`
-	Stemcells      []Stemcell      `yaml:"stemcells"`
-	Update         Update          `yaml:"update"`
-	InstanceGroups []InstanceGroup `yaml:"instance_groups"`
-	Variables      []Variable      `yaml:"variables,omitempty"`
 }
 
 // Release represents a BOSH release
@@ -127,6 +118,11 @@ func NewClient(cfg *config.BOSHConfig) (*Client, error) {
 			TLSClientConfig: tlsConfig,
 		},
 		Timeout: 30 * time.Second,
+		// Disable automatic redirect following so we can read Location headers
+		// from 302 responses (BOSH Director returns 302 with task URLs)
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
 	}
 
 	return &Client{
@@ -203,6 +199,11 @@ func (c *Client) authenticate() error {
 
 // doRequest performs an authenticated request to BOSH director
 func (c *Client) doRequest(method, path string, body io.Reader) (*http.Response, error) {
+	return c.doRequestWithContentType(method, path, body, "application/json")
+}
+
+// doRequestWithContentType performs an authenticated request with a specific content type
+func (c *Client) doRequestWithContentType(method, path string, body io.Reader, contentType string) (*http.Response, error) {
 	if err := c.authenticate(); err != nil {
 		return nil, err
 	}
@@ -213,14 +214,14 @@ func (c *Client) doRequest(method, path string, body io.Reader) (*http.Response,
 	}
 
 	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentType)
 
 	return c.httpClient.Do(req)
 }
 
 // Deploy creates or updates a deployment
 func (c *Client) Deploy(manifest []byte) (*Task, error) {
-	resp, err := c.doRequest("POST", "/deployments", bytes.NewReader(manifest))
+	resp, err := c.doRequestWithContentType("POST", "/deployments", bytes.NewReader(manifest), "text/yaml")
 	if err != nil {
 		return nil, fmt.Errorf("failed to deploy: %w", err)
 	}
@@ -231,10 +232,12 @@ func (c *Client) Deploy(manifest []byte) (*Task, error) {
 		return nil, fmt.Errorf("deploy failed: %s - %s", resp.Status, string(body))
 	}
 
-	// Extract task ID from redirect location
+	// Extract task ID from redirect location (may be absolute or relative URL)
 	location := resp.Header.Get("Location")
-	var taskID int
-	fmt.Sscanf(location, "/tasks/%d", &taskID)
+	taskID, err := extractTaskID(location)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract task ID from Location header %q: %w", location, err)
+	}
 
 	return c.GetTask(taskID)
 }
@@ -253,8 +256,10 @@ func (c *Client) DeleteDeployment(name string) (*Task, error) {
 	}
 
 	location := resp.Header.Get("Location")
-	var taskID int
-	fmt.Sscanf(location, "/tasks/%d", &taskID)
+	taskID, err := extractTaskID(location)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract task ID from Location header %q: %w", location, err)
+	}
 
 	return c.GetTask(taskID)
 }
@@ -339,8 +344,10 @@ func (c *Client) GetDeploymentVMs(deploymentName string) ([]map[string]any, erro
 	if resp.StatusCode == http.StatusFound {
 		// This returns a task, wait for it
 		location := resp.Header.Get("Location")
-		var taskID int
-		fmt.Sscanf(location, "/tasks/%d", &taskID)
+		taskID, err := extractTaskID(location)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract task ID from Location header %q: %w", location, err)
+		}
 
 		task, err := c.WaitForTask(taskID, 2*time.Minute)
 		if err != nil {
@@ -380,4 +387,122 @@ func (c *Client) GetDeploymentVMs(deploymentName string) ([]map[string]any, erro
 	}
 
 	return vms, nil
+}
+
+// cloudConfig represents the relevant parts of a BOSH cloud config
+type cloudConfig struct {
+	Networks []struct {
+		Name    string `yaml:"name"`
+		Subnets []struct {
+			AZ  string   `yaml:"az"`
+			AZs []string `yaml:"azs"`
+		} `yaml:"subnets"`
+	} `yaml:"networks"`
+}
+
+// getCloudConfigContent fetches the cloud config YAML content from BOSH.
+// Tries the newer /configs endpoint first, then falls back to the legacy /cloud_configs endpoint.
+func (c *Client) getCloudConfigContent() (string, error) {
+	// Try the newer /configs endpoint first (BOSH Director 270+)
+	resp, err := c.doRequest("GET", "/configs?type=cloud&latest=true", nil)
+	if err == nil {
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusOK {
+			var configs []struct {
+				Content string `json:"content"`
+			}
+			if err := json.Unmarshal(body, &configs); err == nil && len(configs) > 0 {
+				return configs[0].Content, nil
+			}
+		}
+	}
+
+	// Fall back to the legacy /cloud_configs endpoint
+	resp2, err := c.doRequest("GET", "/cloud_configs?limit=1", nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get cloud config from both /configs and /cloud_configs: %w", err)
+	}
+	defer resp2.Body.Close()
+
+	body2, _ := io.ReadAll(resp2.Body)
+
+	if resp2.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("get cloud config failed: %s - %s", resp2.Status, string(body2))
+	}
+
+	var legacyConfigs []struct {
+		Properties string `json:"properties"`
+	}
+	if err := json.Unmarshal(body2, &legacyConfigs); err != nil {
+		return "", fmt.Errorf("failed to decode legacy cloud configs: %w", err)
+	}
+
+	if len(legacyConfigs) == 0 || legacyConfigs[0].Properties == "" {
+		return "", fmt.Errorf("no cloud config found (legacy endpoint returned %d configs)", len(legacyConfigs))
+	}
+
+	return legacyConfigs[0].Properties, nil
+}
+
+// GetCloudConfigAZsForNetwork fetches the BOSH cloud config and returns
+// the AZ names associated with a given network. This allows on-demand
+// deployments to use the correct AZs without static configuration.
+func (c *Client) GetCloudConfigAZsForNetwork(networkName string) ([]string, error) {
+	// Try the newer /configs endpoint first
+	content, err := c.getCloudConfigContent()
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse the YAML content of the cloud config
+	var cc cloudConfig
+	if err := yaml.Unmarshal([]byte(content), &cc); err != nil {
+		return nil, fmt.Errorf("failed to parse cloud config YAML: %w", err)
+	}
+
+	// Find the network and collect its AZs
+	var azs []string
+	seen := make(map[string]bool)
+
+	for _, network := range cc.Networks {
+		if network.Name == networkName {
+			for _, subnet := range network.Subnets {
+				// Subnets can have either a single "az" or multiple "azs"
+				if subnet.AZ != "" && !seen[subnet.AZ] {
+					azs = append(azs, subnet.AZ)
+					seen[subnet.AZ] = true
+				}
+				for _, az := range subnet.AZs {
+					if az != "" && !seen[az] {
+						azs = append(azs, az)
+						seen[az] = true
+					}
+				}
+			}
+			break
+		}
+	}
+
+	if len(azs) == 0 {
+		return nil, fmt.Errorf("no AZs found for network %q in cloud config", networkName)
+	}
+
+	return azs, nil
+}
+
+// extractTaskID extracts a task ID from a BOSH Location header.
+// The header may be an absolute URL (https://director:25555/tasks/123)
+// or a relative path (/tasks/123).
+func extractTaskID(location string) (int, error) {
+	idx := strings.Index(location, "/tasks/")
+	if idx == -1 {
+		return 0, fmt.Errorf("no /tasks/ found in %q", location)
+	}
+	var taskID int
+	_, err := fmt.Sscanf(location[idx:], "/tasks/%d", &taskID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse task ID from %q: %w", location, err)
+	}
+	return taskID, nil
 }

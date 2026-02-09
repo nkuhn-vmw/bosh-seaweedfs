@@ -27,6 +27,7 @@ type ServiceInstance struct {
 	// For dedicated plan instances
 	DeploymentName string `json:"deployment_name,omitempty"`
 	S3Endpoint     string `json:"s3_endpoint,omitempty"`
+	IAMEndpoint    string `json:"iam_endpoint,omitempty"` // Internal IP:port for IAM operations
 	FilerEndpoint  string `json:"filer_endpoint,omitempty"`
 	ConsoleURL     string `json:"console_url,omitempty"`
 	AdminAccessKey string `json:"admin_access_key,omitempty"`

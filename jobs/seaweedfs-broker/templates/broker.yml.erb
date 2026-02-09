@@ -126,12 +126,8 @@ catalog:
         - blob-storage
       metadata:
         displayName: "SeaweedFS"
-<% icon_base64 = p('seaweedfs.broker.catalog.icon_base64', '') %>
-<% if !icon_base64.empty? %>
-        imageUrl: "data:image/png;base64,<%= icon_base64 %>"
-<% else %>
-        imageUrl: "https://seaweedfs.github.io/seaweedfs/images/SeaweedFS_Logo.png"
-<% end %>
+<% icon_url = p('seaweedfs.broker.catalog.icon_url', '') %>
+        imageUrl: "<%= icon_url %>"
         longDescription: "SeaweedFS is a distributed storage system for blobs, objects, files, and data lake, with O(1) disk seek and cloud tiering."
         providerDisplayName: "SeaweedFS"
         documentationUrl: "https://github.com/seaweedfs/seaweedfs/wiki"
@@ -185,6 +181,7 @@ shared_cluster:
 cf:
   system_domain: "<%= p('seaweedfs.broker.cf.system_domain', '') %>"
   apps_domain: "<%= p('seaweedfs.broker.cf.apps_domain', '') %>"
+  deployment_name: "<%= p('seaweedfs.broker.cf.deployment_name', '') %>"
 
 bosh:
   url: "<%= p('seaweedfs.broker.bosh.url') %>"
@@ -203,6 +200,49 @@ bosh:
   release_version: "<%= p('seaweedfs.broker.bosh.release_version') %>"
   stemcell_os: "<%= p('seaweedfs.broker.on_demand.stemcell_os') %>"
   stemcell_version: "<%= p('seaweedfs.broker.on_demand.stemcell_version') %>"
+  routing_release_version: "<%= p('seaweedfs.broker.on_demand.routing_release_version', 'latest') %>"
+
+# NATS configuration for on-demand route registration
+<%
+  # Discover NATS config from the nats-tls link (cross-deployment)
+  nats_machines = []
+  nats_port = 4224
+  nats_user = ""
+  nats_password = ""
+  if_link('nats-tls') do |nats_link|
+    nats_link.instances.each do |instance|
+      nats_machines << instance.address
+    end
+    nats_port = nats_link.p('nats.port', 4224) rescue 4224
+    nats_user = nats_link.p('nats.user', '') rescue ''
+    nats_password = nats_link.p('nats.password', '') rescue ''
+  end
+%>
+nats:
+<% if !nats_machines.empty? %>
+  machines:
+<% nats_machines.each do |machine| %>
+    - "<%= machine %>"
+<% end %>
+  port: <%= nats_port %>
+<% end %>
+<% if !nats_user.to_s.empty? %>
+  user: "<%= nats_user %>"
+  password: "<%= nats_password %>"
+<% end %>
+  tls:
+    enabled: <%= p('seaweedfs.broker.nats.tls.enabled', true) %>
+<% nats_client_cert = p('seaweedfs.broker.nats.tls.client_cert', '') %>
+<% nats_client_key = p('seaweedfs.broker.nats.tls.client_key', '') %>
+<% nats_ca_cert = p('seaweedfs.broker.nats.tls.ca_cert', '') %>
+<% if !nats_client_cert.to_s.empty? %>
+    client_cert: |
+<%= nats_client_cert.gsub(/^/, '      ') %>
+    client_key: |
+<%= nats_client_key.gsub(/^/, '      ') %>
+    ca_cert: |
+<%= nats_ca_cert.gsub(/^/, '      ') %>
+<% end %>
 
 state_store:
   type: "file"

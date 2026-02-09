@@ -18,6 +18,9 @@ consumes:
   - name: seaweedfs-s3
     type: seaweedfs-s3
     optional: true
+  - name: nats-tls
+    type: nats-tls
+    optional: true
 
 provides:
   - name: seaweedfs-broker
@@ -70,11 +73,11 @@ properties:
     description: "Service description for the broker catalog"
     default: "SeaweedFS distributed object storage with S3-compatible API"
 
-  seaweedfs.broker.catalog.icon_base64:
+  seaweedfs.broker.catalog.icon_url:
     description: |
-      Base64-encoded PNG icon for the service catalog. This is used as a data URI
-      in the imageUrl field, making the icon available in air-gapped environments.
-      If empty, the external SeaweedFS logo URL will be used as fallback.
+      URL for the service catalog icon displayed in the CF marketplace.
+      The broker serves an embedded icon at /icon.png, so this should typically be
+      https://<broker-route>.<system_domain>/icon.png
     default: ""
 
   # Shared cluster configuration
@@ -167,6 +170,10 @@ properties:
     description: "Cloud Foundry apps domain for on-demand console routes"
     default: ""
 
+  seaweedfs.broker.cf.deployment_name:
+    description: "CF BOSH deployment name for cross-deployment link consumption (e.g., cf-abc123)"
+    default: ""
+
   # Legacy properties for backwards compatibility
   seaweedfs.broker.bosh.deployment_prefix:
     description: "Prefix for on-demand deployment names"
@@ -188,3 +195,25 @@ properties:
   seaweedfs.broker.route_registrar.routes:
     description: "Routes to register with the Cloud Foundry router"
     default: []
+
+  # NATS TLS configuration for on-demand route registration
+  seaweedfs.broker.nats.tls.enabled:
+    description: "Enable NATS TLS for on-demand route registration"
+    default: true
+
+  seaweedfs.broker.nats.tls.client_cert:
+    description: "NATS client certificate for on-demand route registration"
+    default: ""
+
+  seaweedfs.broker.nats.tls.client_key:
+    description: "NATS client private key for on-demand route registration"
+    default: ""
+
+  seaweedfs.broker.nats.tls.ca_cert:
+    description: "NATS CA certificate for on-demand route registration"
+    default: ""
+
+  # Routing release info for on-demand deployments
+  seaweedfs.broker.on_demand.routing_release_version:
+    description: "Version of the routing release to use for on-demand deployments"
+    default: "latest"
