@@ -986,22 +986,31 @@ func (b *Broker) provisionDedicatedCluster(instance *store.ServiceInstance, plan
 	// If route_registrar was configured (requires both CF deployment and NATS config),
 	// use the gorouter hostname as the S3 endpoint
 	hasNATSConfig := b.config.NATS.TLS.Enabled && b.config.NATS.TLS.ClientCert != ""
+	cfg := plan.DedicatedConfig
 	if hasCFDeployment && hasNATSConfig {
 		s3RouteHost := fmt.Sprintf("seaweedfs-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
-		masterConsoleHost := fmt.Sprintf("seaweedfs-console-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
-		filerHost := fmt.Sprintf("seaweedfs-filer-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
-		volumeHost := fmt.Sprintf("seaweedfs-volume-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
 		instance.S3Endpoint = s3RouteHost
-		instance.ConsoleURL = fmt.Sprintf("https://%s", masterConsoleHost)
-		instance.FilerURL = fmt.Sprintf("https://%s", filerHost)
-		instance.VolumeURL = fmt.Sprintf("https://%s", volumeHost)
-		adminHost := fmt.Sprintf("seaweedfs-admin-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
-		instance.AdminURL = fmt.Sprintf("https://%s", adminHost)
 		log.Printf("Set S3Endpoint to gorouter route: %s", instance.S3Endpoint)
-		log.Printf("Set ConsoleURL to master route: %s", instance.ConsoleURL)
-		log.Printf("Set FilerURL to filer route: %s", instance.FilerURL)
-		log.Printf("Set VolumeURL to volume route: %s", instance.VolumeURL)
-		log.Printf("Set AdminURL to admin route: %s", instance.AdminURL)
+		if cfg != nil && cfg.EnableMasterRoute {
+			masterConsoleHost := fmt.Sprintf("seaweedfs-console-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+			instance.ConsoleURL = fmt.Sprintf("https://%s", masterConsoleHost)
+			log.Printf("Set ConsoleURL to master route: %s", instance.ConsoleURL)
+		}
+		if cfg != nil && cfg.EnableFilerRoute {
+			filerHost := fmt.Sprintf("seaweedfs-filer-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+			instance.FilerURL = fmt.Sprintf("https://%s", filerHost)
+			log.Printf("Set FilerURL to filer route: %s", instance.FilerURL)
+		}
+		if cfg != nil && cfg.EnableVolumeRoute {
+			volumeHost := fmt.Sprintf("seaweedfs-volume-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+			instance.VolumeURL = fmt.Sprintf("https://%s", volumeHost)
+			log.Printf("Set VolumeURL to volume route: %s", instance.VolumeURL)
+		}
+		if cfg != nil && cfg.EnableAdminRoute {
+			adminHost := fmt.Sprintf("seaweedfs-admin-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+			instance.AdminURL = fmt.Sprintf("https://%s", adminHost)
+			log.Printf("Set AdminURL to admin route: %s", instance.AdminURL)
+		}
 	}
 
 	// Create the default bucket on the dedicated cluster using admin credentials
@@ -1196,7 +1205,7 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 		cfg.Replication,
 	)
 
-	if canRouteRegister && s3RouteHost != "" {
+	if canRouteRegister && s3RouteHost != "" && cfg.EnableMasterRoute {
 		masterConsoleHost = fmt.Sprintf("seaweedfs-console-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
 		masterJobsSection += natsRouteRegJobs
 		masterJobsSection += fmt.Sprintf(`
@@ -1221,7 +1230,7 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 		b.config.BOSH.ReleaseName,
 	)
 
-	if canRouteRegister && s3RouteHost != "" {
+	if canRouteRegister && s3RouteHost != "" && cfg.EnableFilerRoute {
 		filerHost = fmt.Sprintf("seaweedfs-filer-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
 		filerJobsSection += natsRouteRegJobs
 		filerJobsSection += fmt.Sprintf(`
@@ -1246,7 +1255,7 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 		b.config.BOSH.ReleaseName,
 	)
 
-	if canRouteRegister && s3RouteHost != "" {
+	if canRouteRegister && s3RouteHost != "" && cfg.EnableVolumeRoute {
 		volumeHost = fmt.Sprintf("seaweedfs-volume-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
 		volumeJobsSection += natsRouteRegJobs
 		volumeJobsSection += fmt.Sprintf(`
@@ -1320,7 +1329,7 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 		instance.AdminPassword,
 	)
 
-	if canRouteRegister {
+	if canRouteRegister && cfg.EnableAdminRoute {
 		adminHost = fmt.Sprintf("seaweedfs-admin-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
 		adminJobsSection += natsRouteRegJobs
 		adminJobsSection += fmt.Sprintf(`
@@ -1336,8 +1345,6 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 			adminHost,
 		)
 	}
-
-	_ = adminHost // used in route registration above
 
 	manifest := fmt.Sprintf(`---
 name: %s

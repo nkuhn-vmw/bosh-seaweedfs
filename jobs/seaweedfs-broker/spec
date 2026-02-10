@@ -85,6 +85,14 @@ properties:
     description: "Whether the shared cluster plan is enabled"
     default: true
 
+  seaweedfs.broker.shared_cluster.plan_name:
+    description: "Name of the shared plan in the marketplace"
+    default: "shared"
+
+  seaweedfs.broker.shared_cluster.plan_description:
+    description: "Description of the shared plan in the marketplace"
+    default: "Shared SeaweedFS cluster with dedicated bucket"
+
   seaweedfs.broker.shared_cluster.s3_endpoint:
     description: "S3 endpoint of the shared SeaweedFS cluster"
     default: ""

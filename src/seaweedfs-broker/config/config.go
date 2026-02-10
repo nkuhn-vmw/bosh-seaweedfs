@@ -110,14 +110,18 @@ type PlanMetadata struct {
 
 // DedicatedPlanConfig holds configuration for dedicated cluster plans
 type DedicatedPlanConfig struct {
-	VMType        string   `yaml:"vm_type"`
-	DiskType      string   `yaml:"disk_type"`
-	MasterNodes   int      `yaml:"master_nodes"`
-	VolumeNodes   int      `yaml:"volume_nodes"`
-	FilerNodes    int      `yaml:"filer_nodes"`
-	Replication   string   `yaml:"replication"`
-	Network       string   `yaml:"network"`
-	AZs           []string `yaml:"azs"`
+	VMType            string   `yaml:"vm_type"`
+	DiskType          string   `yaml:"disk_type"`
+	MasterNodes       int      `yaml:"master_nodes"`
+	VolumeNodes       int      `yaml:"volume_nodes"`
+	FilerNodes        int      `yaml:"filer_nodes"`
+	Replication       string   `yaml:"replication"`
+	Network           string   `yaml:"network"`
+	AZs               []string `yaml:"azs"`
+	EnableMasterRoute bool     `yaml:"enable_master_route"`
+	EnableFilerRoute  bool     `yaml:"enable_filer_route"`
+	EnableVolumeRoute bool     `yaml:"enable_volume_route"`
+	EnableAdminRoute  bool     `yaml:"enable_admin_route"`
 }
 
 // SharedClusterConfig holds configuration for the shared SeaweedFS cluster

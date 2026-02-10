@@ -77,19 +77,25 @@
           'filer_nodes' => filer_nodes,
           'replication' => replication,
           'network' => on_demand_network,
-          'azs' => on_demand_azs
+          'azs' => on_demand_azs,
+          'enable_master_route' => plan['enable_master_console_route'] || false,
+          'enable_filer_route' => plan['enable_filer_console_route'] || false,
+          'enable_volume_route' => plan['enable_volume_console_route'] || false,
+          'enable_admin_route' => plan['enable_admin_console_route'] || false
         }
       }
     end
   end
 
   # Build static plans list - only include shared if enabled
+  shared_plan_name = p('seaweedfs.broker.shared_cluster.plan_name', 'shared')
+  shared_plan_description = p('seaweedfs.broker.shared_cluster.plan_description', 'Shared SeaweedFS cluster with dedicated bucket')
   static_plans = []
   if shared_cluster_enabled
     static_plans << {
       'id' => 'shared-bucket',
-      'name' => 'shared',
-      'description' => 'Shared SeaweedFS cluster with dedicated bucket',
+      'name' => shared_plan_name,
+      'description' => shared_plan_description,
       'free' => true,
       'plan_type' => 'shared'
     }
@@ -164,6 +170,10 @@ catalog:
 <% plan['dedicated_config']['azs'].each do |az| %>
               - "<%= az %>"
 <% end %>
+            enable_master_route: <%= plan['dedicated_config']['enable_master_route'] || false %>
+            enable_filer_route: <%= plan['dedicated_config']['enable_filer_route'] || false %>
+            enable_volume_route: <%= plan['dedicated_config']['enable_volume_route'] || false %>
+            enable_admin_route: <%= plan['dedicated_config']['enable_admin_route'] || false %>
 <% end %>
 <% end %>
 
