@@ -32,8 +32,10 @@ type ServiceInstance struct {
 	ConsoleURL     string `json:"console_url,omitempty"`
 	FilerURL       string `json:"filer_url,omitempty"`
 	VolumeURL      string `json:"volume_url,omitempty"`
+	AdminURL       string `json:"admin_url,omitempty"`
 	AdminAccessKey string `json:"admin_access_key,omitempty"`
 	AdminSecretKey string `json:"admin_secret_key,omitempty"`
+	AdminPassword  string `json:"admin_password,omitempty"`
 
 	// Provisioning state
 	State        string `json:"state"` // provisioning, succeeded, failed

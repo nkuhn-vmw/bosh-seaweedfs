@@ -1,0 +1,57 @@
+#!/bin/bash
+
+set -e
+
+RUN_DIR=/var/vcap/sys/run/seaweedfs-admin
+LOG_DIR=/var/vcap/sys/log/seaweedfs-admin
+PIDFILE=${RUN_DIR}/seaweedfs-admin.pid
+WEED=/var/vcap/packages/seaweedfs/weed
+
+case $1 in
+  start)
+    mkdir -p ${RUN_DIR} ${LOG_DIR}
+    chown -R vcap:vcap ${RUN_DIR} ${LOG_DIR}
+
+    <%
+      # Resolve master addresses from BOSH link or property fallback
+      masters = p('seaweedfs.admin.master')
+      if_link('seaweedfs-master') do |master_link|
+        master_port = master_link.p('seaweedfs.master.port')
+        master_addrs = master_link.instances.map { |i| "#{i.address}:#{master_port}" }
+        masters = master_addrs.join(',')
+      end
+      masters = 'localhost:9333' if masters.empty?
+    %>
+
+    ADMIN_PASSWORD_ARG=""
+    <% if p('seaweedfs.admin.password') != "" %>
+    ADMIN_PASSWORD_ARG="-adminPassword=<%= p('seaweedfs.admin.password') %>"
+    <% end %>
+
+    exec chpst -u vcap:vcap ${WEED} admin \
+      -port=<%= p('seaweedfs.admin.port') %> \
+      -masters=<%= masters %> \
+      -adminUser=<%= p('seaweedfs.admin.username') %> \
+      ${ADMIN_PASSWORD_ARG} \
+      >> ${LOG_DIR}/seaweedfs-admin.stdout.log \
+      2>> ${LOG_DIR}/seaweedfs-admin.stderr.log &
+
+    echo $! > ${PIDFILE}
+    ;;
+
+  stop)
+    if [ -f ${PIDFILE} ]; then
+      PID=$(cat ${PIDFILE})
+      kill ${PID} || true
+      while kill -0 ${PID} 2>/dev/null; do
+        sleep 1
+      done
+      rm -f ${PIDFILE}
+    fi
+    ;;
+
+  *)
+    echo "Usage: ctl {start|stop}"
+    exit 1
+    ;;
+esac

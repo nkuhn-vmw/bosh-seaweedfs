@@ -1,0 +1,30 @@
+---
+name: seaweedfs-admin
+packages:
+  - seaweedfs
+templates:
+  ctl.erb: bin/ctl
+  pre-start.erb: bin/pre-start
+  health_check.erb: bin/health_check
+
+consumes:
+  - name: seaweedfs-master
+    type: seaweedfs-master
+    optional: true
+
+properties:
+  seaweedfs.admin.port:
+    description: "Port for the admin web UI"
+    default: 23646
+  seaweedfs.admin.master:
+    description: "Comma-separated master addresses (host:port). Used as fallback when BOSH link is unavailable."
+    default: ""
+  seaweedfs.admin.username:
+    description: "Username for admin UI authentication"
+    default: "admin"
+  seaweedfs.admin.password:
+    description: "Password for admin UI authentication. If empty, no authentication is required."
+    default: ""
+  nats.tls.ca_cert:
+    description: "NATS server CA certificate. When set and route_registrar is co-located, this is written to the route_registrar config directory for TLS verification."
+    default: ""

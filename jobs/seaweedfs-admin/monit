@@ -1,0 +1,5 @@
+check process seaweedfs-admin
+  with pidfile /var/vcap/sys/run/seaweedfs-admin/seaweedfs-admin.pid
+  start program "/var/vcap/jobs/seaweedfs-admin/bin/ctl start"
+  stop program "/var/vcap/jobs/seaweedfs-admin/bin/ctl stop"
+  group vcap

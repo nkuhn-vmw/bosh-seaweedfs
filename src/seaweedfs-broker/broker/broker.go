@@ -666,6 +666,11 @@ func (b *Broker) buildCredentials(instance *store.ServiceInstance, binding *stor
 		if instance.VolumeURL != "" {
 			creds["volume_url"] = instance.VolumeURL
 		}
+		if instance.AdminURL != "" {
+			creds["admin_url"] = instance.AdminURL
+			creds["admin_username"] = "admin"
+			creds["admin_password"] = instance.AdminPassword
+		}
 	}
 
 	return map[string]any{
@@ -887,6 +892,7 @@ func (b *Broker) provisionDedicatedCluster(instance *store.ServiceInstance, plan
 	// Generate admin credentials before manifest so they are included in the deployment
 	instance.AdminAccessKey = generateAccessKey()
 	instance.AdminSecretKey = generateSecretKey()
+	instance.AdminPassword = generateSecretKey()
 	instance.BucketName = "default"
 
 	// Use AZs from plan config (passed from tile's availability_zone_names).
@@ -989,10 +995,13 @@ func (b *Broker) provisionDedicatedCluster(instance *store.ServiceInstance, plan
 		instance.ConsoleURL = fmt.Sprintf("https://%s", masterConsoleHost)
 		instance.FilerURL = fmt.Sprintf("https://%s", filerHost)
 		instance.VolumeURL = fmt.Sprintf("https://%s", volumeHost)
+		adminHost := fmt.Sprintf("seaweedfs-admin-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+		instance.AdminURL = fmt.Sprintf("https://%s", adminHost)
 		log.Printf("Set S3Endpoint to gorouter route: %s", instance.S3Endpoint)
 		log.Printf("Set ConsoleURL to master route: %s", instance.ConsoleURL)
 		log.Printf("Set FilerURL to filer route: %s", instance.FilerURL)
 		log.Printf("Set VolumeURL to volume route: %s", instance.VolumeURL)
+		log.Printf("Set AdminURL to admin route: %s", instance.AdminURL)
 	}
 
 	// Create the default bucket on the dedicated cluster using admin credentials
@@ -1296,6 +1305,40 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 		)
 	}
 
+	// Build the admin instance group jobs section
+	adminHost := ""
+	adminJobsSection := fmt.Sprintf(`  jobs:
+  - name: seaweedfs-admin
+    release: %s
+    properties:
+      seaweedfs:
+        admin:
+          port: 23646
+          username: admin
+          password: %s`,
+		b.config.BOSH.ReleaseName,
+		instance.AdminPassword,
+	)
+
+	if canRouteRegister {
+		adminHost = fmt.Sprintf("seaweedfs-admin-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
+		adminJobsSection += natsRouteRegJobs
+		adminJobsSection += fmt.Sprintf(`
+  properties:%s
+    route_registrar:
+      routes:
+      - name: seaweedfs-admin-ondemand
+        port: 23646
+        registration_interval: 20s
+        uris:
+        - %s`,
+			natsRouteRegProps,
+			adminHost,
+		)
+	}
+
+	_ = adminHost // used in route registration above
+
 	manifest := fmt.Sprintf(`---
 name: %s
 
@@ -1351,6 +1394,15 @@ instance_groups:
   networks:
   - name: %s
 %s
+
+- name: seaweedfs-admin
+  instances: 1
+  vm_type: %s
+  stemcell: default
+  azs: %s
+  networks:
+  - name: %s
+%s
 `,
 		instance.DeploymentName,
 		releasesSection,
@@ -1378,6 +1430,10 @@ instance_groups:
 		toYAMLArray(cfg.AZs),
 		cfg.Network,
 		s3JobsSection,
+		cfg.VMType,
+		toYAMLArray(cfg.AZs),
+		cfg.Network,
+		adminJobsSection,
 	)
 
 	return []byte(manifest)
