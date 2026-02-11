@@ -1,3 +1,4 @@
+<% if p('otel.otlp_endpoint') != '' %>
 processes:
   - name: otel-collector
     executable: /var/vcap/packages/otel-collector/otelcol-contrib
@@ -7,3 +8,6 @@ processes:
       GOGC: "80"
     limits:
       open_files: 65536
+<% else %>
+processes: []
+<% end %>

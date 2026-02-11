@@ -801,9 +801,9 @@ forms:
           from the Service Plan Configuration tab). Only used when 'Test On-Demand Plan' is enabled.
         default: ""
         optional: true
-  - name: syslog_config
-    label: Syslog
-    description: Configure syslog forwarding for all SeaweedFS VMs
+  - name: syslog_otel_config
+    label: Syslog / OTEL
+    description: Configure syslog forwarding and OpenTelemetry metrics export for all SeaweedFS VMs
     properties:
       - name: syslog_address
         type: string
@@ -837,10 +837,6 @@ forms:
         description: "Permitted peer for TLS verification"
         default: ""
         optional: true
-  - name: otel_config
-    label: Observability
-    description: Configure OpenTelemetry metrics export for SeaweedFS
-    properties:
       - name: otlp_endpoint
         type: string
         label: OTLP Endpoint URL
