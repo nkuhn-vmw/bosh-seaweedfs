@@ -6,7 +6,7 @@ golang/go1.21.6.linux-amd64.tar.gz:
   sha: sha256:3f934f40ac360b9c01f616a9aa1796d227d8b0328bf64cb045c7b8c4ee9caea4
 seaweedfs-broker/seaweedfs-broker.tar.gz:
   size: 104354
-  sha: sha256:6dfb92090ee2c4627e39bc473714d4999b32597e644666b4c2b759197dd77750
+  sha: sha256:9e6974fa87d4be2154fad6ba5402c816a4e2f93dc79488954e293fc61e2f708c
 seaweedfs/linux_amd64.tar.gz:
   size: 40265195
   sha: sha256:61c8a132c6753cc6726ab6dcc761e0fb2ae2bf7310b1276e82427f4a33dc2a7b

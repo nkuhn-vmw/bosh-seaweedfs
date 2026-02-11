@@ -489,21 +489,10 @@ bosh-seaweedfs/
 ├── tile.yml                    # Tanzu tile configuration (Kiln format)
 ├── resources/
 │   └── icon.png                # Marketplace icon
-├── config/
-│   ├── blobs.yml               # BOSH blob tracking
-│   └── final.yml               # BOSH release config
-└── .github/
-    └── workflows/
-        └── build-tile.yml      # CI: build, test, and release
+└── config/
+    ├── blobs.yml               # BOSH blob tracking
+    └── final.yml               # BOSH release config
 ```
-
-## CI/CD
-
-The GitHub Actions workflow (`.github/workflows/build-tile.yml`) runs on pushes and PRs to main:
-
-1. **build-tile** - Downloads blobs, creates BOSH release, packages tile
-2. **test-broker** - Builds and verifies the Go broker binary
-3. **release** - Creates GitHub releases with tile and BOSH release artifacts (on tags)
 
 ## Development
 
