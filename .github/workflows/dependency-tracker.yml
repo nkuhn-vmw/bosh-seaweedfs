@@ -45,12 +45,25 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Write issue body
+        if: steps.seaweedfs-version.outputs.has_update == 'true' || steps.go-version.outputs.has_update == 'true'
+        run: |
+          cat > /tmp/issue-body.md << 'EOF'
+          ## Dependency Updates Available
+
+          | Component | Current | Latest |
+          |-----------|---------|--------|
+          | SeaweedFS | ${{ steps.seaweedfs-version.outputs.current }} | ${{ steps.seaweedfs-version.outputs.latest }} |
+          | Go | ${{ steps.go-version.outputs.current }} | ${{ steps.go-version.outputs.latest }} |
+          | OTel Collector | — | ${{ steps.otel-version.outputs.latest }} |
+          EOF
+
       - name: Create summary issue
         if: steps.seaweedfs-version.outputs.has_update == 'true' || steps.go-version.outputs.has_update == 'true'
         uses: peter-evans/create-issue-from-file@v5
         with:
           title: "Dependency updates available"
-          content-filepath: /dev/stdin
+          content-filepath: /tmp/issue-body.md
           labels: ci-cd
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,146 @@
+name: Build and Release
+on:
+  repository_dispatch:
+    types: [new-upstream-version]
+  workflow_dispatch:
+    inputs:
+      tile_version:
+        description: 'Tile version (e.g. 1.0.126). Auto-increments if empty.'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-bosh-release:
+    runs-on: ubuntu-latest
+    outputs:
+      tile_version: ${{ steps.version.outputs.tile_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine tile version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.tile_version }}" ]; then
+            echo "tile_version=${{ github.event.inputs.tile_version }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ github.event.client_payload.version }}" ]; then
+            # Auto-increment for upstream dispatches
+            TILE_VERSION=$("scripts/get-next-version.sh")
+            echo "tile_version=${TILE_VERSION}" >> $GITHUB_OUTPUT
+          else
+            TILE_VERSION=$("scripts/get-next-version.sh")
+            echo "tile_version=${TILE_VERSION}" >> $GITHUB_OUTPUT
+          fi
+          echo "Building tile version: $(cat $GITHUB_OUTPUT | grep tile_version | cut -d= -f2)"
+
+      - name: Install BOSH CLI
+        run: |
+          BOSH_CLI_VERSION=$(gh api repos/cloudfoundry/bosh-cli/releases/latest --jq '.tag_name' | sed 's/^v//')
+          echo "Installing BOSH CLI ${BOSH_CLI_VERSION}"
+          curl -sLo bosh "https://github.com/cloudfoundry/bosh-cli/releases/download/v${BOSH_CLI_VERSION}/bosh-cli-${BOSH_CLI_VERSION}-linux-amd64"
+          chmod +x bosh
+          sudo mv bosh /usr/local/bin/bosh
+          bosh --version
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Cache blobs
+        uses: actions/cache@v4
+        with:
+          path: blobs/
+          key: bosh-blobs-${{ hashFiles('config/blobs.yml') }}
+          restore-keys: bosh-blobs-
+
+      - name: Build BOSH release
+        run: |
+          RELEASE_TARBALL=$(bash scripts/build-release.sh "${{ steps.version.outputs.tile_version }}")
+          echo "release_tarball=${RELEASE_TARBALL}" >> $GITHUB_ENV
+          echo "Built release: ${RELEASE_TARBALL}"
+
+      - name: Upload BOSH release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bosh-release
+          path: ${{ env.release_tarball }}
+          retention-days: 7
+
+  build-tile:
+    runs-on: ubuntu-latest
+    needs: build-bosh-release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download BOSH release
+        uses: actions/download-artifact@v4
+        with:
+          name: bosh-release
+          path: release-artifact/
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install tile-generator
+        run: pip install tile-generator
+
+      - name: Build tile
+        run: |
+          RELEASE_FILE=$(ls release-artifact/*.tgz | head -1)
+          echo "Using release: ${RELEASE_FILE}"
+          bash scripts/build-tile.sh "${{ needs.build-bosh-release.outputs.tile_version }}" --release "${RELEASE_FILE}"
+
+      - name: Upload tile artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tile
+          path: product/*.pivotal
+          retention-days: 14
+
+  validate-and-release:
+    runs-on: ubuntu-latest
+    needs: [build-bosh-release, build-tile]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download tile
+        uses: actions/download-artifact@v4
+        with:
+          name: tile
+          path: tile/
+
+      - name: Validate tile structure
+        run: |
+          TILE_FILE=$(ls tile/*.pivotal 2>/dev/null | head -1)
+          if [ -z "${TILE_FILE}" ]; then
+            echo "ERROR: No .pivotal file found"
+            exit 1
+          fi
+          echo "Tile file: ${TILE_FILE}"
+          echo "Size: $(ls -lh ${TILE_FILE} | awk '{print $5}')"
+
+          # Validate it's a valid zip
+          unzip -t "${TILE_FILE}" > /dev/null
+          echo "Tile is a valid zip archive"
+
+          # Show contents
+          echo ""
+          echo "Tile contents:"
+          unzip -l "${TILE_FILE}" | head -20
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: tile/*.pivotal
+          tag_name: v${{ needs.build-bosh-release.outputs.tile_version }}
+          name: SeaweedFS Tile v${{ needs.build-bosh-release.outputs.tile_version }}
+          body: |
+            SeaweedFS BOSH Tile release v${{ needs.build-bosh-release.outputs.tile_version }}
+
+            ## Installation
+            1. Upload to Ops Manager: `om upload-product -p seaweedfs-*.pivotal`
+            2. Stage the product: `om stage-product -p seaweedfs`
+            3. Configure and apply changes
+          draft: false
+          prerelease: false

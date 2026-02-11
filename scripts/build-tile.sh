@@ -15,7 +15,7 @@ set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
-TILE_CMD="${TILE_CMD:-/Users/nkuhn/Library/Python/3.9/bin/tile}"
+TILE_CMD="${TILE_CMD:-$(command -v tile 2>/dev/null || echo "/Users/nkuhn/Library/Python/3.9/bin/tile")}"
 
 # Parse arguments
 TILE_VERSION=""

@@ -57,6 +57,30 @@ else
   echo "Go blob already present" >&2
 fi
 
+# OpenTelemetry Collector
+OTEL_VERSION="0.96.0"
+if [[ ! -f "blobs/otel-collector/otelcol-contrib.tar.gz" ]]; then
+  mkdir -p blobs/otel-collector
+  echo "Downloading OTel Collector ${OTEL_VERSION}..." >&2
+  curl -sL "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTEL_VERSION}/otelcol-contrib_${OTEL_VERSION}_linux_amd64.tar.gz" \
+    -o "blobs/otel-collector/otelcol-contrib.tar.gz"
+  bosh add-blob "blobs/otel-collector/otelcol-contrib.tar.gz" "otel-collector/otelcol-contrib.tar.gz" >&2
+else
+  echo "OTel Collector blob already present" >&2
+fi
+
+# CF CLI (for smoke tests)
+CF_CLI_VERSION="8.8.2"
+if [[ ! -f "blobs/cf-cli/cf8-cli-${CF_CLI_VERSION}-linux64.tgz" ]]; then
+  mkdir -p blobs/cf-cli
+  echo "Downloading CF CLI ${CF_CLI_VERSION}..." >&2
+  curl -sL "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=${CF_CLI_VERSION}&source=github-rel" \
+    -o "blobs/cf-cli/cf8-cli-${CF_CLI_VERSION}-linux64.tgz"
+  bosh add-blob "blobs/cf-cli/cf8-cli-${CF_CLI_VERSION}-linux64.tgz" "cf-cli/cf8-cli-${CF_CLI_VERSION}-linux64.tgz" >&2
+else
+  echo "CF CLI blob already present" >&2
+fi
+
 # Step 2: Create broker source tarball
 echo "" >&2
 echo "=== Packaging Broker Source ===" >&2
