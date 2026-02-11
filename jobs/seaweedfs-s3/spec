@@ -3,12 +3,16 @@ name: seaweedfs-s3
 packages:
   - seaweedfs
 templates:
+  bpm.yml.erb: config/bpm.yml
   ctl.erb: bin/ctl
   pre-start.erb: bin/pre-start
   s3.json.erb: config/s3.json
   tls_cert.pem.erb: config/certs/tls_cert.pem
   tls_key.pem.erb: config/certs/tls_key.pem
   health_check.erb: bin/health_check
+  ca.pem.erb: config/certs/ca.pem
+  cert.pem.erb: config/certs/cert.pem
+  key.pem.erb: config/certs/key.pem
 
 provides:
   - name: seaweedfs-s3
@@ -61,6 +65,16 @@ properties:
   seaweedfs.s3.iam.enabled:
     description: "Enable IAM API for dynamic credential management"
     default: true
+
+  tls.ca:
+    description: "CA certificate for mTLS"
+    default: ""
+  tls.certificate:
+    description: "Server certificate"
+    default: ""
+  tls.private_key:
+    description: "Server private key"
+    default: ""
 
   # NATS CA cert for co-located route_registrar (on-demand deployments)
   nats.tls.ca_cert:

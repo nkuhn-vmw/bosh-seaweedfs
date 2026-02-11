@@ -1,0 +1,58 @@
+name: Upstream Watch
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect new SeaweedFS release
+        id: detect
+        run: |
+          CURRENT=$(yq '.upstream.current' config/versions.yml)
+          LATEST=$(gh api repos/seaweedfs/seaweedfs/releases/latest --jq '.tag_name')
+          echo "Current: ${CURRENT}, Latest: ${LATEST}"
+          if [ "$CURRENT" != "$LATEST" ]; then
+            echo "new_version=${LATEST}" >> $GITHUB_OUTPUT
+            echo "has_new=true" >> $GITHUB_OUTPUT
+          else
+            echo "No new version detected"
+            echo "has_new=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download and verify assets
+        if: steps.detect.outputs.has_new == 'true'
+        run: |
+          VERSION=${{ steps.detect.outputs.new_version }}
+          mkdir -p staged-artifacts/blobs
+
+          # Download Linux amd64 binary
+          DOWNLOAD_URL="https://github.com/seaweedfs/seaweedfs/releases/download/${VERSION}/linux_amd64_full.tar.gz"
+          echo "Downloading SeaweedFS ${VERSION} from ${DOWNLOAD_URL}"
+          curl -L -o "staged-artifacts/blobs/seaweedfs-${VERSION}-linux-amd64.tar.gz" "${DOWNLOAD_URL}"
+
+          # Compute SHA-256 checksum
+          sha256sum "staged-artifacts/blobs/seaweedfs-${VERSION}-linux-amd64.tar.gz" | tee staged-artifacts/checksums.sha256
+
+          echo "Download complete: $(ls -lh staged-artifacts/blobs/)"
+
+      - name: Stage artifacts
+        if: steps.detect.outputs.has_new == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: staged-upstream-${{ steps.detect.outputs.new_version }}
+          path: staged-artifacts/
+          retention-days: 7
+
+      - name: Dispatch to Stage 2
+        if: steps.detect.outputs.has_new == 'true'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          event-type: new-upstream-version
+          client-payload: '{"version": "${{ steps.detect.outputs.new_version }}"}'

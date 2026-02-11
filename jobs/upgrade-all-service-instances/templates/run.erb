@@ -1,0 +1,139 @@
+#!/bin/bash
+set -euo pipefail
+
+<%
+  broker_url = p('upgrade.broker_url')
+  broker_username = p('upgrade.broker_username')
+  broker_password = p('upgrade.broker_password')
+
+  if_link('seaweedfs-broker') do |broker_link|
+    broker_port = broker_link.p('seaweedfs.broker.port') rescue 8080
+    broker_url = "http://#{broker_link.instances.first.address}:#{broker_port}" if broker_url.empty?
+  end
+%>
+
+BROKER_URL="<%= broker_url %>"
+BROKER_USER="<%= broker_username %>"
+BROKER_PASS="<%= broker_password %>"
+CANARIES=<%= p('upgrade.canaries') %>
+MAX_IN_FLIGHT=<%= p('upgrade.max_in_flight') %>
+FAIL_FAST=<%= p('upgrade.fail_fast') %>
+
+BOSH_URL="<%= p('bosh.url') %>"
+BOSH_CA_CERT_FILE="/var/vcap/jobs/upgrade-all-service-instances/config/bosh-ca.pem"
+
+LOG_DIR="/var/vcap/sys/log/upgrade-all-service-instances"
+mkdir -p "${LOG_DIR}"
+
+echo "=== SeaweedFS On-Demand Instance Upgrade ==="
+echo "[$(date)] Starting upgrade process"
+echo "[$(date)] Broker URL: ${BROKER_URL}"
+echo "[$(date)] Canaries: ${CANARIES}, Max in flight: ${MAX_IN_FLIGHT}"
+
+# 1. Query broker for all on-demand deployments
+echo "[$(date)] Querying broker for on-demand deployments..."
+DEPLOYMENTS_JSON=$(curl -sf -u "${BROKER_USER}:${BROKER_PASS}" \
+  "${BROKER_URL}/admin/deployments" 2>&1) || {
+  echo "[$(date)] ERROR: Failed to query broker for deployments"
+  echo "[$(date)] Response: ${DEPLOYMENTS_JSON}"
+  exit 1
+}
+
+DEPLOYMENTS=$(echo "${DEPLOYMENTS_JSON}" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+if isinstance(data, list):
+    for d in data:
+        if isinstance(d, dict):
+            print(d.get('deployment_name', d.get('name', '')))
+        else:
+            print(d)
+" 2>/dev/null) || {
+  echo "[$(date)] Warning: Could not parse deployments JSON, treating as newline-delimited"
+  DEPLOYMENTS=$(echo "${DEPLOYMENTS_JSON}" | tr -d '[]",' | tr ' ' '\n' | grep -v '^$')
+}
+
+if [ -z "${DEPLOYMENTS}" ]; then
+  echo "[$(date)] No on-demand deployments found. Nothing to upgrade."
+  exit 0
+fi
+
+TOTAL=$(echo "${DEPLOYMENTS}" | wc -l | tr -d ' ')
+echo "[$(date)] Found ${TOTAL} on-demand deployment(s) to upgrade"
+
+FAILED=0
+UPGRADED=0
+FAILED_LIST=""
+
+upgrade_deployment() {
+  local deployment=$1
+  echo "[$(date)] Upgrading ${deployment}..."
+
+  # Trigger recreate via BOSH (re-deploys with latest release)
+  local result
+  result=$(curl -sf -u "${BROKER_USER}:${BROKER_PASS}" \
+    -X POST "${BROKER_URL}/admin/deployments/${deployment}/upgrade" 2>&1) || {
+    echo "[$(date)] FAILED to upgrade ${deployment}: ${result}"
+    return 1
+  }
+
+  echo "[$(date)] Successfully triggered upgrade for ${deployment}"
+  return 0
+}
+
+# 2. Canary phase
+echo ""
+echo "=== Canary phase: upgrading ${CANARIES} instance(s) ==="
+CANARY_LIST=$(echo "${DEPLOYMENTS}" | head -n ${CANARIES})
+while IFS= read -r dep; do
+  [ -z "${dep}" ] && continue
+  if upgrade_deployment "${dep}"; then
+    UPGRADED=$((UPGRADED + 1))
+  else
+    FAILED=$((FAILED + 1))
+    FAILED_LIST="${FAILED_LIST}  - ${dep}\n"
+    if [ "${FAIL_FAST}" = "true" ]; then
+      echo "[$(date)] Fail-fast enabled. Aborting remaining upgrades."
+      echo ""
+      echo "=== Upgrade ABORTED: ${UPGRADED} succeeded, ${FAILED} failed out of ${TOTAL} ==="
+      echo -e "Failed deployments:\n${FAILED_LIST}"
+      exit 1
+    fi
+  fi
+done <<< "${CANARY_LIST}"
+
+# 3. Remaining instances
+REMAINING=$(echo "${DEPLOYMENTS}" | tail -n +$((CANARIES + 1)))
+if [ -n "${REMAINING}" ]; then
+  REMAINING_COUNT=$(echo "${REMAINING}" | wc -l | tr -d ' ')
+  echo ""
+  echo "=== Batch phase: upgrading ${REMAINING_COUNT} remaining instance(s), max ${MAX_IN_FLIGHT} in flight ==="
+
+  BATCH=0
+  while IFS= read -r dep; do
+    [ -z "${dep}" ] && continue
+    BATCH=$((BATCH + 1))
+
+    if upgrade_deployment "${dep}"; then
+      UPGRADED=$((UPGRADED + 1))
+    else
+      FAILED=$((FAILED + 1))
+      FAILED_LIST="${FAILED_LIST}  - ${dep}\n"
+      if [ "${FAIL_FAST}" = "true" ]; then
+        echo "[$(date)] Fail-fast enabled. Aborting remaining upgrades."
+        echo ""
+        echo "=== Upgrade ABORTED: ${UPGRADED} succeeded, ${FAILED} failed out of ${TOTAL} ==="
+        echo -e "Failed deployments:\n${FAILED_LIST}"
+        exit 1
+      fi
+    fi
+  done <<< "${REMAINING}"
+fi
+
+# 4. Report
+echo ""
+echo "=== Upgrade complete: ${UPGRADED} succeeded, ${FAILED} failed out of ${TOTAL} ==="
+if [ ${FAILED} -gt 0 ]; then
+  echo -e "Failed deployments:\n${FAILED_LIST}"
+  exit 1
+fi

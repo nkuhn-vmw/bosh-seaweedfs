@@ -116,6 +116,10 @@ packages:
         templates:
           - name: seaweedfs-master
             release: seaweedfs
+          - name: syslog-forwarder
+            release: seaweedfs
+          - name: otel-collector
+            release: seaweedfs
           - name: route_registrar
             release: routing
             consumes:
@@ -133,6 +137,18 @@ packages:
         dynamic_ip: 1
         max_in_flight: 1
         properties:
+          syslog:
+            address: (( .properties.syslog_address.value ))
+            transport: (( .properties.syslog_transport.value ))
+            tls_enabled: (( .properties.syslog_tls_enabled.value ))
+            ca_cert: (( .properties.syslog_ca_cert.value ))
+            permitted_peer: (( .properties.syslog_permitted_peer.value ))
+          otel:
+            otlp_endpoint: (( .properties.otlp_endpoint.value ))
+            otlp_protocol: (( .properties.otlp_protocol.value ))
+            otlp_ca_cert: (( .properties.otlp_ca_cert.value ))
+            scrape_interval: (( .properties.otel_scrape_interval.value ))
+            enable_host_metrics: (( .properties.otel_host_metrics.value ))
           nats:
             tls:
               enabled: true
@@ -156,6 +172,10 @@ packages:
         templates:
           - name: seaweedfs-volume
             release: seaweedfs
+          - name: syslog-forwarder
+            release: seaweedfs
+          - name: otel-collector
+            release: seaweedfs
           - name: route_registrar
             release: routing
             consumes:
@@ -173,6 +193,18 @@ packages:
         dynamic_ip: 1
         max_in_flight: 1
         properties:
+          syslog:
+            address: (( .properties.syslog_address.value ))
+            transport: (( .properties.syslog_transport.value ))
+            tls_enabled: (( .properties.syslog_tls_enabled.value ))
+            ca_cert: (( .properties.syslog_ca_cert.value ))
+            permitted_peer: (( .properties.syslog_permitted_peer.value ))
+          otel:
+            otlp_endpoint: (( .properties.otlp_endpoint.value ))
+            otlp_protocol: (( .properties.otlp_protocol.value ))
+            otlp_ca_cert: (( .properties.otlp_ca_cert.value ))
+            scrape_interval: (( .properties.otel_scrape_interval.value ))
+            enable_host_metrics: (( .properties.otel_host_metrics.value ))
           nats:
             tls:
               enabled: true
@@ -195,6 +227,12 @@ packages:
         templates:
           - name: seaweedfs-filer
             release: seaweedfs
+          - name: syslog-forwarder
+            release: seaweedfs
+          - name: otel-collector
+            release: seaweedfs
+          - name: backup-agent
+            release: seaweedfs
           - name: route_registrar
             release: routing
             consumes:
@@ -212,6 +250,27 @@ packages:
         dynamic_ip: 1
         max_in_flight: 1
         properties:
+          syslog:
+            address: (( .properties.syslog_address.value ))
+            transport: (( .properties.syslog_transport.value ))
+            tls_enabled: (( .properties.syslog_tls_enabled.value ))
+            ca_cert: (( .properties.syslog_ca_cert.value ))
+            permitted_peer: (( .properties.syslog_permitted_peer.value ))
+          otel:
+            otlp_endpoint: (( .properties.otlp_endpoint.value ))
+            otlp_protocol: (( .properties.otlp_protocol.value ))
+            otlp_ca_cert: (( .properties.otlp_ca_cert.value ))
+            scrape_interval: (( .properties.otel_scrape_interval.value ))
+            enable_host_metrics: (( .properties.otel_host_metrics.value ))
+          backup:
+            enabled: (( .properties.backup_enabled.value ))
+            schedule: (( .properties.backup_schedule.value ))
+            destination_type: (( .properties.backup_destination_type.value ))
+            s3_endpoint: (( .properties.backup_s3_endpoint.value ))
+            s3_bucket: (( .properties.backup_s3_bucket.value ))
+            s3_access_key: (( .properties.backup_s3_access_key.value ))
+            s3_secret_key: (( .properties.backup_s3_secret_key.value ))
+            retention_count: (( .properties.backup_retention_count.value ))
           nats:
             tls:
               enabled: true
@@ -234,6 +293,8 @@ packages:
         templates:
           - name: seaweedfs-s3
             release: seaweedfs
+          - name: syslog-forwarder
+            release: seaweedfs
           - name: route_registrar
             release: routing
             consumes:
@@ -251,6 +312,12 @@ packages:
         dynamic_ip: 1
         max_in_flight: 1
         properties:
+          syslog:
+            address: (( .properties.syslog_address.value ))
+            transport: (( .properties.syslog_transport.value ))
+            tls_enabled: (( .properties.syslog_tls_enabled.value ))
+            ca_cert: (( .properties.syslog_ca_cert.value ))
+            permitted_peer: (( .properties.syslog_permitted_peer.value ))
           nats:
             tls:
               enabled: true
@@ -290,6 +357,8 @@ packages:
             consumes:
               seaweedfs-master:
                 from: seaweedfs-master
+          - name: syslog-forwarder
+            release: seaweedfs
           - name: route_registrar
             release: routing
             consumes:
@@ -306,6 +375,12 @@ packages:
         dynamic_ip: 1
         max_in_flight: 1
         properties:
+          syslog:
+            address: (( .properties.syslog_address.value ))
+            transport: (( .properties.syslog_transport.value ))
+            tls_enabled: (( .properties.syslog_tls_enabled.value ))
+            ca_cert: (( .properties.syslog_ca_cert.value ))
+            permitted_peer: (( .properties.syslog_permitted_peer.value ))
           nats:
             tls:
               enabled: true
@@ -335,6 +410,8 @@ packages:
               nats-tls:
                 from: nats-tls
                 deployment: (( ..cf.deployment_name ))
+          - name: syslog-forwarder
+            release: seaweedfs
           - name: route_registrar
             release: routing
             consumes:
@@ -352,6 +429,12 @@ packages:
         dynamic_ip: 1
         max_in_flight: 1
         properties:
+          syslog:
+            address: (( .properties.syslog_address.value ))
+            transport: (( .properties.syslog_transport.value ))
+            tls_enabled: (( .properties.syslog_tls_enabled.value ))
+            ca_cert: (( .properties.syslog_ca_cert.value ))
+            permitted_peer: (( .properties.syslog_permitted_peer.value ))
           nats:
             tls:
               enabled: true
@@ -491,6 +574,58 @@ packages:
             on_demand_plan_name: (( .properties.smoke_test_on_demand_plan.value ))
             on_demand_timeout_minutes: 30
             on_demand_deprovision_timeout_minutes: 20
+
+      # Restore errand (manual trigger)
+      - name: restore
+        label: Errand - Restore from Backup
+        templates:
+          - name: restore
+            release: seaweedfs
+        lifecycle: errand
+        memory: 1024
+        ephemeral_disk: 4096
+        instances: 1
+        cpu: 1
+        static_ip: 0
+        dynamic_ip: 1
+        properties:
+          restore:
+            local_path: /var/vcap/store/backups
+            source_type: (( .properties.backup_destination_type.value ))
+            s3_endpoint: (( .properties.backup_s3_endpoint.value ))
+            s3_bucket: (( .properties.backup_s3_bucket.value ))
+            s3_access_key: (( .properties.backup_s3_access_key.value ))
+            s3_secret_key: (( .properties.backup_s3_secret_key.value ))
+
+      # Upgrade all on-demand instances errand (manual trigger)
+      - name: upgrade-all-service-instances
+        label: Errand - Upgrade All On-Demand Instances
+        templates:
+          - name: upgrade-all-service-instances
+            release: seaweedfs
+        lifecycle: errand
+        memory: 512
+        ephemeral_disk: 2048
+        instances: 1
+        cpu: 1
+        static_ip: 0
+        dynamic_ip: 1
+        properties:
+          upgrade:
+            broker_url: https://(( .properties.broker_route_name.value )).(( ..cf.cloud_controller.system_domain.value ))
+            broker_username: (( .properties.generated_broker_credentials.identity ))
+            broker_password: (( .properties.generated_broker_credentials.password ))
+            canaries: 1
+            max_in_flight: 3
+            fail_fast: true
+          bosh:
+            url: https://(( $director.hostname )):25555
+            root_ca_cert: (( $director.ca_public_key ))
+            authentication:
+              uaa:
+                url: https://(( $director.hostname )):8443
+                client_id: (( $self.uaa_client_name ))
+                client_secret: (( $self.uaa_client_secret ))
 
   - name: bpm
     type: bosh-release
@@ -642,6 +777,37 @@ forms:
         type: simple_credentials
         label: Shared Cluster Admin Console Credentials
         configurable: false
+  - name: security_config
+    label: Security Configuration
+    description: |
+      Configure TLS certificates for inter-component mTLS communication.
+      Certificates are auto-generated and managed by BOSH/CredHub.
+    properties:
+      - name: seaweedfs_ca
+        type: rsa_cert_credentials
+        label: SeaweedFS Internal CA
+        configurable: false
+        optional: false
+      - name: seaweedfs_master_tls
+        type: rsa_cert_credentials
+        label: SeaweedFS Master TLS Certificate
+        configurable: false
+        optional: false
+      - name: seaweedfs_volume_tls
+        type: rsa_cert_credentials
+        label: SeaweedFS Volume TLS Certificate
+        configurable: false
+        optional: false
+      - name: seaweedfs_filer_tls
+        type: rsa_cert_credentials
+        label: SeaweedFS Filer TLS Certificate
+        configurable: false
+        optional: false
+      - name: seaweedfs_s3_tls
+        type: rsa_cert_credentials
+        label: SeaweedFS S3 TLS Certificate
+        configurable: false
+        optional: false
   - name: smoke_test_config
     label: Smoke Test Configuration
     description: |
@@ -666,3 +832,121 @@ forms:
           from the Service Plan Configuration tab). Only used when 'Test On-Demand Plan' is enabled.
         default: ""
         optional: true
+  - name: syslog_config
+    label: Syslog
+    description: Configure syslog forwarding for all SeaweedFS VMs
+    properties:
+      - name: syslog_address
+        type: string
+        label: Syslog Address
+        description: "host:port of syslog drain (leave empty to disable)"
+        default: ""
+        optional: true
+      - name: syslog_transport
+        type: dropdown_select
+        label: Transport Protocol
+        default: tcp
+        options:
+          - name: tcp
+            label: TCP
+          - name: udp
+            label: UDP
+          - name: relp
+            label: RELP
+      - name: syslog_tls_enabled
+        type: boolean
+        label: Enable TLS
+        default: false
+      - name: syslog_ca_cert
+        type: text
+        label: TLS CA Certificate
+        description: "CA certificate for TLS syslog transport"
+        optional: true
+      - name: syslog_permitted_peer
+        type: string
+        label: Permitted Peer
+        description: "Permitted peer for TLS verification"
+        default: ""
+        optional: true
+  - name: otel_config
+    label: Observability
+    description: Configure OpenTelemetry metrics export for SeaweedFS
+    properties:
+      - name: otlp_endpoint
+        type: string
+        label: OTLP Endpoint URL
+        description: "OTLP exporter endpoint (leave empty to disable)"
+        default: ""
+        optional: true
+      - name: otlp_protocol
+        type: dropdown_select
+        label: OTLP Protocol
+        default: grpc
+        options:
+          - name: grpc
+            label: gRPC
+          - name: http
+            label: HTTP
+      - name: otlp_ca_cert
+        type: text
+        label: OTLP TLS CA Certificate
+        description: "CA certificate for OTLP endpoint TLS"
+        optional: true
+      - name: otel_scrape_interval
+        type: string
+        label: Metrics Scrape Interval
+        description: "How often to scrape metrics (e.g. 30s, 1m)"
+        default: "30s"
+      - name: otel_host_metrics
+        type: boolean
+        label: Enable Host Metrics
+        description: "Collect host-level CPU, memory, disk, and network metrics"
+        default: true
+  - name: backup_config
+    label: Backup
+    description: Configure backup for all SeaweedFS clusters
+    properties:
+      - name: backup_enabled
+        type: boolean
+        label: Enable Scheduled Backups
+        default: false
+      - name: backup_schedule
+        type: string
+        label: Backup Schedule (cron)
+        description: "Cron expression for backup schedule (e.g. '0 2 * * *' for daily at 2 AM)"
+        default: "0 2 * * *"
+      - name: backup_destination_type
+        type: dropdown_select
+        label: Backup Destination
+        default: local
+        options:
+          - name: local
+            label: Local Persistent Disk
+          - name: nfs
+            label: NFS
+          - name: s3
+            label: S3-Compatible Store
+      - name: backup_s3_endpoint
+        type: string
+        label: Backup S3 Endpoint
+        description: "S3-compatible endpoint URL for remote backup storage"
+        default: ""
+        optional: true
+      - name: backup_s3_bucket
+        type: string
+        label: Backup S3 Bucket
+        default: ""
+        optional: true
+      - name: backup_s3_access_key
+        type: secret
+        label: Backup S3 Access Key
+        optional: true
+      - name: backup_s3_secret_key
+        type: secret
+        label: Backup S3 Secret Key
+        optional: true
+      - name: backup_retention_count
+        type: integer
+        label: Backups to Retain
+        description: "Number of backup snapshots to keep before pruning"
+        default: 7

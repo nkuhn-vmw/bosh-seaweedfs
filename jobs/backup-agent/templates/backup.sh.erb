@@ -1,0 +1,77 @@
+#!/bin/bash
+set -euo pipefail
+
+<%
+  master_address = "localhost:9333"
+  if_link('seaweedfs-master') do |master_link|
+    master_port = master_link.p('seaweedfs.master.port') rescue 9333
+    master_address = "#{master_link.instances.first.address}:#{master_port}"
+  end
+%>
+MASTER_URL="<%= master_address %>"
+FILER_URL="<%= spec.address %>:<%= p('backup.filer_port') %>"
+S3_URL="<%= spec.address %>:<%= p('backup.s3_port') %>"
+TIMESTAMP=$(date +%Y%m%dT%H%M%S)
+DEPLOYMENT="<%= spec.deployment %>"
+BACKUP_DIR="<%= p('backup.local_path') %>/${DEPLOYMENT}/${TIMESTAMP}"
+
+mkdir -p "${BACKUP_DIR}"
+
+echo "[$(date)] Starting backup for deployment ${DEPLOYMENT}"
+
+# 1. Filer metadata backup
+echo "[$(date)] Backing up filer metadata..."
+/var/vcap/packages/seaweedfs/weed filer.backup \
+  -filer="${FILER_URL}" \
+  -target="${BACKUP_DIR}/filer-meta/" 2>&1 || {
+    echo "[$(date)] Warning: filer metadata backup failed"
+  }
+
+# 2. IAM configuration export
+echo "[$(date)] Backing up IAM configuration..."
+curl -sf "http://${S3_URL}/iam/api/v1/users" \
+  > "${BACKUP_DIR}/iam-users.json" 2>/dev/null || echo '[]' > "${BACKUP_DIR}/iam-users.json"
+curl -sf "http://${S3_URL}/iam/api/v1/policies" \
+  > "${BACKUP_DIR}/iam-policies.json" 2>/dev/null || echo '[]' > "${BACKUP_DIR}/iam-policies.json"
+
+# 3. Record backup metadata
+cat > "${BACKUP_DIR}/backup-metadata.json" <<METADATA
+{
+  "timestamp": "${TIMESTAMP}",
+  "deployment": "${DEPLOYMENT}",
+  "master_url": "${MASTER_URL}",
+  "backup_type": "<%= p('backup.destination_type') %>"
+}
+METADATA
+
+# 4. Ship to remote destination if configured
+<% if p('backup.destination_type') == 's3' && p('backup.s3_endpoint') != '' %>
+echo "[$(date)] Uploading backup to S3..."
+export AWS_ACCESS_KEY_ID="<%= p('backup.s3_access_key') %>"
+export AWS_SECRET_ACCESS_KEY="<%= p('backup.s3_secret_key') %>"
+aws s3 sync "${BACKUP_DIR}" \
+  "s3://<%= p('backup.s3_bucket') %>/${DEPLOYMENT}/${TIMESTAMP}/" \
+  --endpoint-url "<%= p('backup.s3_endpoint') %>" 2>&1 || {
+    echo "[$(date)] Warning: S3 upload failed"
+  }
+<% elsif p('backup.destination_type') == 'nfs' && p('backup.nfs_endpoint') != '' %>
+echo "[$(date)] Copying backup to NFS..."
+NFS_MOUNT="/var/vcap/store/nfs-backup"
+mkdir -p "${NFS_MOUNT}"
+mount -t nfs "<%= p('backup.nfs_endpoint') %>" "${NFS_MOUNT}" 2>/dev/null || true
+cp -r "${BACKUP_DIR}" "${NFS_MOUNT}/${DEPLOYMENT}/" 2>&1 || {
+  echo "[$(date)] Warning: NFS copy failed"
+}
+umount "${NFS_MOUNT}" 2>/dev/null || true
+<% end %>
+
+# 5. Retention: prune old backups
+echo "[$(date)] Pruning backups beyond retention count (<%= p('backup.retention_count') %>)..."
+BACKUP_BASE="<%= p('backup.local_path') %>/${DEPLOYMENT}"
+if [ -d "${BACKUP_BASE}" ]; then
+  ls -1dt "${BACKUP_BASE}"/*/ 2>/dev/null | \
+    tail -n +$(( <%= p('backup.retention_count') %> + 1 )) | \
+    xargs rm -rf 2>/dev/null || true
+fi
+
+echo "[$(date)] Backup complete: ${BACKUP_DIR}"

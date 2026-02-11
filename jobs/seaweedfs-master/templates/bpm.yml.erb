@@ -1,0 +1,43 @@
+<%
+  peers_arg = ""
+  if p('seaweedfs.master.peers') != ""
+    peers_arg = p('seaweedfs.master.peers')
+  else
+    # Auto-discover peers from BOSH link instances for HA
+    if_link('seaweedfs-master') do |master_link|
+      if master_link.instances.length > 1
+        peers_arg = master_link.instances.map { |i| "#{i.address}:#{p('seaweedfs.master.port')}" }.join(',')
+      end
+    end
+  end
+%>
+processes:
+  - name: seaweedfs-master
+    executable: /var/vcap/packages/seaweedfs/weed
+    args:
+      - master
+      - -ip=<%= spec.address %>
+      - -ip.bind=<%= p('seaweedfs.master.ip_bind') %>
+      - -port=<%= p('seaweedfs.master.port') %>
+      - -port.grpc=<%= p('seaweedfs.master.port_grpc') %>
+      - -mdir=/var/vcap/store/seaweedfs-master
+      - -volumeSizeLimitMB=<%= p('seaweedfs.master.volume_size_limit_mb') %>
+      - -defaultReplication=<%= p('seaweedfs.master.default_replication') %>
+      - -metricsPort=<%= p('seaweedfs.master.metrics_port') %>
+<% if peers_arg != "" %>
+      - -peers=<%= peers_arg %>
+<% end %>
+      - -rack=<%= spec.az %>
+<% if_p('tls.ca') do %>
+      - -security.tls.ca=/var/vcap/jobs/seaweedfs-master/config/certs/ca.pem
+      - -security.tls.cert=/var/vcap/jobs/seaweedfs-master/config/certs/cert.pem
+      - -security.tls.key=/var/vcap/jobs/seaweedfs-master/config/certs/key.pem
+<% end %>
+    env:
+      GOGC: "80"
+    limits:
+      open_files: 65536
+    persistent_disk: true
+    additional_volumes:
+      - path: /var/vcap/store/seaweedfs-master
+        writable: true

@@ -1,0 +1,86 @@
+#!/bin/bash
+set -euo pipefail
+
+<%
+  master_address = "localhost:9333"
+  if_link('seaweedfs-master') do |master_link|
+    master_port = master_link.p('seaweedfs.master.port') rescue 9333
+    master_address = "#{master_link.instances.first.address}:#{master_port}"
+  end
+%>
+MASTER_URL="<%= master_address %>"
+FILER_URL="<%= spec.address %>:<%= p('restore.filer_port') %>"
+S3_URL="<%= spec.address %>:<%= p('restore.s3_port') %>"
+DEPLOYMENT="<%= spec.deployment %>"
+TIMESTAMP="<%= p('restore.backup_timestamp') %>"
+LOCAL_PATH="<%= p('restore.local_path') %>"
+
+if [ -z "${TIMESTAMP}" ]; then
+  echo "Error: restore.backup_timestamp property must be set"
+  echo "Available local backups:"
+  ls -1dt "${LOCAL_PATH}/${DEPLOYMENT}"/*/ 2>/dev/null | \
+    xargs -I {} basename {} || echo "  (none found)"
+  exit 1
+fi
+
+BACKUP_DIR="${LOCAL_PATH}/${DEPLOYMENT}/${TIMESTAMP}"
+
+# Pull backup from remote source if needed
+<% if p('restore.source_type') == 's3' && p('restore.s3_endpoint') != '' %>
+echo "[$(date)] Downloading backup from S3..."
+export AWS_ACCESS_KEY_ID="<%= p('restore.s3_access_key') %>"
+export AWS_SECRET_ACCESS_KEY="<%= p('restore.s3_secret_key') %>"
+mkdir -p "${BACKUP_DIR}"
+aws s3 sync \
+  "s3://<%= p('restore.s3_bucket') %>/${DEPLOYMENT}/${TIMESTAMP}/" \
+  "${BACKUP_DIR}/" \
+  --endpoint-url "<%= p('restore.s3_endpoint') %>"
+<% end %>
+
+if [ ! -d "${BACKUP_DIR}" ]; then
+  echo "Error: Backup directory not found: ${BACKUP_DIR}"
+  exit 1
+fi
+
+echo "[$(date)] Starting restore from ${BACKUP_DIR}"
+echo "[$(date)] Backup metadata:"
+cat "${BACKUP_DIR}/backup-metadata.json" 2>/dev/null || echo "  (no metadata found)"
+
+# 1. Restore filer metadata
+if [ -d "${BACKUP_DIR}/filer-meta/" ]; then
+  echo "[$(date)] Restoring filer metadata..."
+  /var/vcap/packages/seaweedfs/weed filer.backup \
+    -filer="${FILER_URL}" \
+    -source="${BACKUP_DIR}/filer-meta/" \
+    -restore || {
+      echo "[$(date)] ERROR: filer metadata restore failed"
+      exit 1
+    }
+else
+  echo "[$(date)] Warning: No filer metadata found in backup"
+fi
+
+# 2. Restore IAM configuration
+if [ -f "${BACKUP_DIR}/iam-users.json" ]; then
+  echo "[$(date)] Restoring IAM users..."
+  curl -sf -X POST "http://${S3_URL}/iam/api/v1/users" \
+    -H "Content-Type: application/json" \
+    -d @"${BACKUP_DIR}/iam-users.json" || {
+      echo "[$(date)] Warning: IAM user restore failed (non-fatal)"
+    }
+fi
+
+if [ -f "${BACKUP_DIR}/iam-policies.json" ]; then
+  echo "[$(date)] Restoring IAM policies..."
+  curl -sf -X POST "http://${S3_URL}/iam/api/v1/policies" \
+    -H "Content-Type: application/json" \
+    -d @"${BACKUP_DIR}/iam-policies.json" || {
+      echo "[$(date)] Warning: IAM policy restore failed (non-fatal)"
+    }
+fi
+
+echo "[$(date)] Restore complete from ${BACKUP_DIR}"
+echo "=== Restore Summary ==="
+echo "  Timestamp: ${TIMESTAMP}"
+echo "  Source: ${BACKUP_DIR}"
+echo "  Deployment: ${DEPLOYMENT}"

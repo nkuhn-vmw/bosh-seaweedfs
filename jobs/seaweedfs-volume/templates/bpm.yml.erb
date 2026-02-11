@@ -1,0 +1,46 @@
+<%
+  # Determine master address from link or property
+  master_address = p('seaweedfs.volume.master')
+  if_link('seaweedfs-master') do |master_link|
+    master_port = master_link.p('seaweedfs.master.port') rescue 9333
+    master_addresses = master_link.instances.map { |instance| "#{instance.address}:#{master_port}" }
+    master_address = master_addresses.join(',')
+  end
+%>
+processes:
+  - name: seaweedfs-volume
+    executable: /var/vcap/packages/seaweedfs/weed
+    args:
+      - volume
+      - -ip=<%= spec.address %>
+      - -ip.bind=<%= p('seaweedfs.volume.ip_bind') %>
+      - -port=<%= p('seaweedfs.volume.port') %>
+      - -port.grpc=<%= p('seaweedfs.volume.port_grpc') %>
+      - -mserver=<%= master_address %>
+      - -dir=/var/vcap/store/seaweedfs-volume
+      - -max=<%= p('seaweedfs.volume.max_volumes') %>
+      - -metricsPort=<%= p('seaweedfs.volume.metrics_port') %>
+      - -readMode=<%= p('seaweedfs.volume.read_mode') %>
+      - -rack=<%= spec.az %>
+<% if p('seaweedfs.volume.data_center') != "" %>
+      - -dataCenter=<%= p('seaweedfs.volume.data_center') %>
+<% end %>
+<% if p('seaweedfs.volume.public_url') != "" %>
+      - -publicUrl=<%= p('seaweedfs.volume.public_url') %>
+<% end %>
+<% if p('seaweedfs.volume.compaction_mb_per_second') > 0 %>
+      - -compactionMBps=<%= p('seaweedfs.volume.compaction_mb_per_second') %>
+<% end %>
+<% if_p('tls.ca') do %>
+      - -security.tls.ca=/var/vcap/jobs/seaweedfs-volume/config/certs/ca.pem
+      - -security.tls.cert=/var/vcap/jobs/seaweedfs-volume/config/certs/cert.pem
+      - -security.tls.key=/var/vcap/jobs/seaweedfs-volume/config/certs/key.pem
+<% end %>
+    env:
+      GOGC: "80"
+    limits:
+      open_files: 65536
+    persistent_disk: true
+    additional_volumes:
+      - path: /var/vcap/store/seaweedfs-volume
+        writable: true

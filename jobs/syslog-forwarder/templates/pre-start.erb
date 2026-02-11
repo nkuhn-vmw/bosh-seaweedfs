@@ -1,0 +1,23 @@
+#!/bin/bash
+set -e
+
+JOB_DIR=/var/vcap/jobs/syslog-forwarder
+
+<% if p('syslog.address') != '' %>
+# Install rsyslog config
+cp ${JOB_DIR}/config/rsyslog.conf /etc/rsyslog.d/50-seaweedfs-forwarder.conf
+
+<% if p('syslog.tls_enabled') && p('syslog.ca_cert') != '' %>
+# Write CA cert for TLS
+mkdir -p ${JOB_DIR}/config/certs
+cp ${JOB_DIR}/config/ca.pem ${JOB_DIR}/config/certs/syslog-ca.pem
+chmod 600 ${JOB_DIR}/config/certs/syslog-ca.pem
+<% end %>
+
+# Restart rsyslog to pick up new config
+/usr/sbin/service rsyslog restart || true
+<% else %>
+# Syslog not configured - remove any existing config
+rm -f /etc/rsyslog.d/50-seaweedfs-forwarder.conf
+/usr/sbin/service rsyslog restart || true
+<% end %>

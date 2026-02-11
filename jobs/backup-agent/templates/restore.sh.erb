@@ -1,0 +1,64 @@
+#!/bin/bash
+set -euo pipefail
+
+<%
+  master_address = "localhost:9333"
+  if_link('seaweedfs-master') do |master_link|
+    master_port = master_link.p('seaweedfs.master.port') rescue 9333
+    master_address = "#{master_link.instances.first.address}:#{master_port}"
+  end
+%>
+MASTER_URL="<%= master_address %>"
+FILER_URL="<%= spec.address %>:<%= p('backup.filer_port') %>"
+S3_URL="<%= spec.address %>:<%= p('backup.s3_port') %>"
+DEPLOYMENT="<%= spec.deployment %>"
+
+if [ $# -lt 1 ]; then
+  echo "Usage: $0 <backup-timestamp>"
+  echo "Available backups:"
+  ls -1dt "<%= p('backup.local_path') %>/${DEPLOYMENT}"/*/ 2>/dev/null | \
+    xargs -I {} basename {} || echo "  (none found)"
+  exit 1
+fi
+
+TIMESTAMP=$1
+BACKUP_DIR="<%= p('backup.local_path') %>/${DEPLOYMENT}/${TIMESTAMP}"
+
+if [ ! -d "${BACKUP_DIR}" ]; then
+  echo "Error: Backup directory not found: ${BACKUP_DIR}"
+  exit 1
+fi
+
+echo "[$(date)] Starting restore from ${BACKUP_DIR}"
+
+# 1. Restore filer metadata
+if [ -d "${BACKUP_DIR}/filer-meta/" ]; then
+  echo "[$(date)] Restoring filer metadata..."
+  /var/vcap/packages/seaweedfs/weed filer.backup \
+    -filer="${FILER_URL}" \
+    -source="${BACKUP_DIR}/filer-meta/" \
+    -restore 2>&1 || {
+      echo "[$(date)] Warning: filer metadata restore failed"
+    }
+fi
+
+# 2. Restore IAM configuration
+if [ -f "${BACKUP_DIR}/iam-users.json" ]; then
+  echo "[$(date)] Restoring IAM users..."
+  curl -sf -X POST "http://${S3_URL}/iam/api/v1/users" \
+    -H "Content-Type: application/json" \
+    -d @"${BACKUP_DIR}/iam-users.json" 2>/dev/null || {
+      echo "[$(date)] Warning: IAM user restore failed"
+    }
+fi
+
+if [ -f "${BACKUP_DIR}/iam-policies.json" ]; then
+  echo "[$(date)] Restoring IAM policies..."
+  curl -sf -X POST "http://${S3_URL}/iam/api/v1/policies" \
+    -H "Content-Type: application/json" \
+    -d @"${BACKUP_DIR}/iam-policies.json" 2>/dev/null || {
+      echo "[$(date)] Warning: IAM policy restore failed"
+    }
+fi
+
+echo "[$(date)] Restore complete from ${BACKUP_DIR}"

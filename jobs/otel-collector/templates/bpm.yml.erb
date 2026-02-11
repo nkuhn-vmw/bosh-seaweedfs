@@ -1,0 +1,9 @@
+processes:
+  - name: otel-collector
+    executable: /var/vcap/packages/otel-collector/otelcol-contrib
+    args:
+      - --config=/var/vcap/jobs/otel-collector/config/otel-config.yml
+    env:
+      GOGC: "80"
+    limits:
+      open_files: 65536

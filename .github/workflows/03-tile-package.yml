@@ -1,0 +1,58 @@
+name: Tile Package
+on:
+  repository_dispatch:
+    types: [bosh-release-promoted]
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download BOSH release
+        uses: actions/download-artifact@v4
+        with:
+          name: bosh-release
+          path: bosh-release/
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install tile-generator
+        run: pip install tile-generator
+
+      - name: Stage release and build tile
+        run: |
+          mkdir -p resources
+          cp bosh-release/seaweedfs-dev.tgz resources/seaweedfs-release.tgz
+
+          # Download dependency releases if not present
+          if [ ! -f resources/bpm-release.tgz ]; then
+            echo "Downloading bpm release..."
+            curl -Lo resources/bpm-release.tgz \
+              "https://bosh.io/d/github.com/cloudfoundry/bpm-release"
+          fi
+
+          if [ ! -f resources/routing-release.tgz ]; then
+            echo "Downloading routing release..."
+            curl -Lo resources/routing-release.tgz \
+              "https://bosh.io/d/github.com/cloudfoundry/routing-release"
+          fi
+
+          # Build tile
+          tile build
+
+      - name: Upload tile artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tile
+          path: product/*.pivotal
+          retention-days: 14
+
+      - name: Dispatch to Stage 4
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          event-type: tile-built

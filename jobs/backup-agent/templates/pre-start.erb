@@ -1,0 +1,17 @@
+#!/bin/bash
+set -e
+
+JOB_DIR=/var/vcap/jobs/backup-agent
+
+# Ensure backup directory exists
+mkdir -p <%= p('backup.local_path') %>
+chown vcap:vcap <%= p('backup.local_path') %>
+
+<% if p('backup.enabled') %>
+# Install cron job for scheduled backups
+cp ${JOB_DIR}/config/cron /etc/cron.d/seaweedfs-backup
+chmod 644 /etc/cron.d/seaweedfs-backup
+<% else %>
+# Remove cron job if backups are disabled
+rm -f /etc/cron.d/seaweedfs-backup
+<% end %>

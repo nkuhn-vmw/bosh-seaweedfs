@@ -1,0 +1,26 @@
+---
+name: syslog-forwarder
+
+templates:
+  rsyslog.conf.erb: config/rsyslog.conf
+  pre-start.erb: bin/pre-start
+  ca.pem.erb: config/ca.pem
+
+packages: []
+
+properties:
+  syslog.address:
+    description: "Syslog drain host:port"
+    default: ""
+  syslog.transport:
+    description: "Transport protocol (tcp, udp, relp)"
+    default: tcp
+  syslog.tls_enabled:
+    description: "Enable TLS for syslog transport"
+    default: false
+  syslog.ca_cert:
+    description: "CA certificate for TLS syslog"
+    default: ""
+  syslog.permitted_peer:
+    description: "Permitted peer for TLS verification"
+    default: ""

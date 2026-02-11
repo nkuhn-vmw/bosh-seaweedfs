@@ -37,6 +37,9 @@ type Config struct {
 
 	// State store configuration
 	StateStore StateStoreConfig `yaml:"state_store"`
+
+	// CredHub configuration for credential storage
+	CredHub CredHubConfig `yaml:"credhub"`
 }
 
 // CFConfig holds Cloud Foundry configuration
@@ -189,6 +192,14 @@ type StateStoreConfig struct {
 	Path string `yaml:"path"`
 	// DatabaseURL is used for database-based state store
 	DatabaseURL string `yaml:"database_url"`
+}
+
+// CredHubConfig holds CredHub configuration for credential storage
+type CredHubConfig struct {
+	URL          string `yaml:"url"`
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
+	CACert       string `yaml:"ca_cert"`
 }
 
 // Load loads configuration from a YAML file

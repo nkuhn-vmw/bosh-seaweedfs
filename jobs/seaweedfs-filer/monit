@@ -1,5 +1,5 @@
 check process seaweedfs-filer
-  with pidfile /var/vcap/sys/run/seaweedfs-filer/seaweedfs-filer.pid
-  start program "/var/vcap/jobs/seaweedfs-filer/bin/ctl start"
-  stop program "/var/vcap/jobs/seaweedfs-filer/bin/ctl stop"
+  with pidfile /var/vcap/sys/run/bpm/seaweedfs-filer/seaweedfs-filer.pid
+  start program "/var/vcap/jobs/bpm/bin/bpm start seaweedfs-filer"
+  stop program "/var/vcap/jobs/bpm/bin/bpm stop seaweedfs-filer"
   group vcap

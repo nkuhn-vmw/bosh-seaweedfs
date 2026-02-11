@@ -1,0 +1,2 @@
+# backup-agent uses cron for scheduling, no persistent daemon to monitor
+# The pre-start script installs the cron job

@@ -1,5 +1,5 @@
 check process seaweedfs-volume
-  with pidfile /var/vcap/sys/run/seaweedfs-volume/seaweedfs-volume.pid
-  start program "/var/vcap/jobs/seaweedfs-volume/bin/ctl start"
-  stop program "/var/vcap/jobs/seaweedfs-volume/bin/ctl stop"
+  with pidfile /var/vcap/sys/run/bpm/seaweedfs-volume/seaweedfs-volume.pid
+  start program "/var/vcap/jobs/bpm/bin/bpm start seaweedfs-volume"
+  stop program "/var/vcap/jobs/bpm/bin/bpm stop seaweedfs-volume"
   group vcap

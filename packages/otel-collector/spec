@@ -1,0 +1,4 @@
+---
+name: otel-collector
+files:
+  - otel-collector/otelcol-contrib.tar.gz

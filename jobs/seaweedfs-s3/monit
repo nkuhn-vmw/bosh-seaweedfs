@@ -1,5 +1,5 @@
 check process seaweedfs-s3
-  with pidfile /var/vcap/sys/run/seaweedfs-s3/seaweedfs-s3.pid
-  start program "/var/vcap/jobs/seaweedfs-s3/bin/ctl start"
-  stop program "/var/vcap/jobs/seaweedfs-s3/bin/ctl stop"
+  with pidfile /var/vcap/sys/run/bpm/seaweedfs-s3/seaweedfs-s3.pid
+  start program "/var/vcap/jobs/bpm/bin/bpm start seaweedfs-s3"
+  stop program "/var/vcap/jobs/bpm/bin/bpm stop seaweedfs-s3"
   group vcap

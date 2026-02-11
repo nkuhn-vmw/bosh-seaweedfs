@@ -1,0 +1,44 @@
+# Forward SeaweedFS logs and system logs to remote syslog drain
+
+module(load="imfile")
+
+<% if p('syslog.tls_enabled') %>
+global(
+  defaultNetstreamDriverCAFile="/var/vcap/jobs/syslog-forwarder/config/certs/syslog-ca.pem"
+)
+$DefaultNetstreamDriver gtls
+$ActionSendStreamDriverMode 1
+$ActionSendStreamDriverAuthMode x509/name
+$ActionSendStreamDriverPermittedPeer <%= p('syslog.permitted_peer') %>
+<% end %>
+
+# SeaweedFS process logs
+input(type="imfile"
+  File="/var/vcap/sys/log/seaweedfs-*/*.log"
+  Tag="seaweedfs"
+  Facility="local0"
+  Severity="info")
+
+# BPM process logs
+input(type="imfile"
+  File="/var/vcap/sys/log/bpm/*/*.log"
+  Tag="seaweedfs-bpm"
+  Facility="local0"
+  Severity="info")
+
+# Structured syslog format with BOSH metadata
+template(name="CfFormat" type="string"
+  string="<%=134%>1 %timegenerated:::date-rfc3339% %HOSTNAME% %syslogtag% - - [instance@47450 deployment=\"<%= spec.deployment %>\" job=\"<%= spec.name %>\" index=\"<%= spec.index %>\" az=\"<%= spec.az %>\" id=\"<%= spec.id %>\"] %msg%\n")
+
+# Forward to drain
+<% if p('syslog.transport') == 'tcp' %>
+action(type="omfwd" target="<%= p('syslog.address').split(':')[0] %>"
+  port="<%= p('syslog.address').split(':')[1] %>"
+  protocol="tcp" template="CfFormat"
+  queue.type="LinkedList" queue.size="50000"
+  action.resumeRetryCount="-1")
+<% elsif p('syslog.transport') == 'udp' %>
+action(type="omfwd" target="<%= p('syslog.address').split(':')[0] %>"
+  port="<%= p('syslog.address').split(':')[1] %>"
+  protocol="udp" template="CfFormat")
+<% end %>

@@ -18,6 +18,7 @@ import (
 
 	"github.com/cloudfoundry/seaweedfs-broker/bosh"
 	"github.com/cloudfoundry/seaweedfs-broker/config"
+	"github.com/cloudfoundry/seaweedfs-broker/credhub"
 	"github.com/cloudfoundry/seaweedfs-broker/iam"
 	"github.com/cloudfoundry/seaweedfs-broker/store"
 )
@@ -33,11 +34,12 @@ const (
 
 // Broker implements the Open Service Broker API
 type Broker struct {
-	config     *config.Config
-	store      store.Store
-	boshClient *bosh.Client
-	s3Client   *minio.Client
-	iamClient  *iam.Client
+	config       *config.Config
+	store        store.Store
+	boshClient   *bosh.Client
+	s3Client     *minio.Client
+	iamClient    *iam.Client
+	credhubClient *credhub.Client
 }
 
 // New creates a new broker instance
@@ -95,6 +97,21 @@ func New(cfg *config.Config) (*Broker, error) {
 			cfg.SharedCluster.Region,
 			iamUseSSL,
 		)
+	}
+
+	// Initialize CredHub client if configured
+	if cfg.CredHub.URL != "" {
+		credhubClient, err := credhub.NewClient(
+			cfg.CredHub.URL,
+			cfg.CredHub.ClientID,
+			cfg.CredHub.ClientSecret,
+			cfg.CredHub.CACert,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create CredHub client: %w", err)
+		}
+		b.credhubClient = credhubClient
+		log.Printf("Initialized CredHub client for %s", cfg.CredHub.URL)
 	}
 
 	return b, nil
@@ -448,6 +465,18 @@ func (b *Broker) bindHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Store credentials in CredHub if configured
+	if b.credhubClient != nil {
+		credPath := fmt.Sprintf("/seaweedfs-broker/instances/%s/bindings/%s", instanceID, bindingID)
+		if err := b.credhubClient.SetJSON(credPath, map[string]interface{}{
+			"access_key": binding.AccessKey,
+			"secret_key": binding.SecretKey,
+			"bucket":     instance.BucketName,
+		}); err != nil {
+			log.Printf("Warning: failed to store credentials in CredHub: %v", err)
+		}
+	}
+
 	b.writeJSON(w, http.StatusCreated, b.buildCredentials(instance, binding))
 }
 
@@ -479,6 +508,14 @@ func (b *Broker) unbindHandler(w http.ResponseWriter, r *http.Request) {
 	// Revoke S3 credentials
 	if err := b.deleteS3Credentials(instance, binding); err != nil {
 		log.Printf("Warning: failed to delete S3 credentials: %v", err)
+	}
+
+	// Delete credentials from CredHub if configured
+	if b.credhubClient != nil {
+		credPath := fmt.Sprintf("/seaweedfs-broker/instances/%s/bindings/%s", instanceID, bindingID)
+		if err := b.credhubClient.Delete(credPath); err != nil {
+			log.Printf("Warning: failed to delete credentials from CredHub: %v", err)
+		}
 	}
 
 	if err := b.store.DeleteBinding(bindingID); err != nil {

@@ -1,0 +1,42 @@
+<%
+  # Determine filer address from link or property
+  filer_address = p('seaweedfs.s3.filer')
+  if_link('seaweedfs-filer') do |filer_link|
+    filer_instance = filer_link.instances.first
+    filer_port = filer_link.p('seaweedfs.filer.port') rescue 8888
+    filer_address = "#{filer_instance.address}:#{filer_port}"
+  end
+%>
+processes:
+  - name: seaweedfs-s3
+    executable: /var/vcap/packages/seaweedfs/weed
+    args:
+      - s3
+      - -ip.bind=<%= p('seaweedfs.s3.ip_bind') %>
+      - -port=<%= p('seaweedfs.s3.port') %>
+      - -port.grpc=<%= p('seaweedfs.s3.port_grpc') %>
+      - -filer=<%= filer_address %>
+      - -metricsPort=<%= p('seaweedfs.s3.metrics_port') %>
+      - -allowEmptyFolder=<%= p('seaweedfs.s3.allow_empty_folder') %>
+<% if p('seaweedfs.s3.domain_name') != "" %>
+      - -domainName=<%= p('seaweedfs.s3.domain_name') %>
+<% end %>
+<% if p('seaweedfs.s3.config.enabled') %>
+      - -config=/var/vcap/jobs/seaweedfs-s3/config/s3.json
+<% end %>
+<% if p('seaweedfs.s3.tls.enabled') %>
+      - -cert=/var/vcap/jobs/seaweedfs-s3/config/certs/tls_cert.pem
+      - -key=/var/vcap/jobs/seaweedfs-s3/config/certs/tls_key.pem
+<% end %>
+<% if !p('seaweedfs.s3.iam.enabled') %>
+      - -iam=false
+<% end %>
+<% if_p('tls.ca') do %>
+      - -security.tls.ca=/var/vcap/jobs/seaweedfs-s3/config/certs/ca.pem
+      - -security.tls.cert=/var/vcap/jobs/seaweedfs-s3/config/certs/cert.pem
+      - -security.tls.key=/var/vcap/jobs/seaweedfs-s3/config/certs/key.pem
+<% end %>
+    env:
+      GOGC: "80"
+    limits:
+      open_files: 65536

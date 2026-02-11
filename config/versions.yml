@@ -1,0 +1,22 @@
+# Auto-managed version state file
+# Updated by CI/CD pipeline workflows
+
+upstream:
+  current: "3.82"
+  previous: ""
+  detected_at: "2026-02-11T00:00:00Z"
+
+bosh_release:
+  current: "0.0.1"
+  tarball_sha256: ""
+
+tile:
+  current: "0.0.1"
+  pivotal_sha256: ""
+
+dependencies:
+  go: "1.22"
+  bpm_release: "latest"
+  routing_release: "latest"
+  otel_collector: "0.96.0"
+  stemcell_os: "ubuntu-jammy"

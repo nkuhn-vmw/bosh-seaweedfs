@@ -3,6 +3,10 @@
 
 set -e -x
 
+export GOFLAGS="-mod=vendor"
+export GONOSUMDB="*"
+export GOPROXY="off"
+
 export GOROOT=$(readlink -nf /var/vcap/packages/golang-1.21)
 export GOPATH=${BOSH_INSTALL_TARGET}
 export GOCACHE=${BOSH_INSTALL_TARGET}/.cache
@@ -17,12 +21,7 @@ tar -xzf seaweedfs-broker/seaweedfs-broker.tar.gz -C ${BOSH_INSTALL_TARGET}/src/
 
 cd ${BOSH_INSTALL_TARGET}/src
 
-# Download dependencies
-export GOPROXY=https://proxy.golang.org,direct
-go mod tidy
-go mod download
-
-# Build the broker
+# Build the broker (using vendored dependencies for air-gap support)
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
   -o ${BOSH_INSTALL_TARGET}/bin/seaweedfs-broker \
   .

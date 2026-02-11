@@ -225,3 +225,17 @@ properties:
   seaweedfs.broker.on_demand.routing_release_version:
     description: "Version of the routing release to use for on-demand deployments"
     default: "latest"
+
+  # CredHub integration for per-binding credential storage
+  seaweedfs.broker.credhub.url:
+    description: "CredHub API URL (e.g., https://credhub.service.cf.internal:8844)"
+    default: ""
+  seaweedfs.broker.credhub.client_id:
+    description: "UAA client ID for CredHub authentication"
+    default: ""
+  seaweedfs.broker.credhub.client_secret:
+    description: "UAA client secret for CredHub authentication"
+    default: ""
+  seaweedfs.broker.credhub.ca_cert:
+    description: "CA certificate for CredHub TLS verification"
+    default: ""

@@ -1,5 +1,5 @@
 check process seaweedfs-master
-  with pidfile /var/vcap/sys/run/seaweedfs-master/seaweedfs-master.pid
-  start program "/var/vcap/jobs/seaweedfs-master/bin/ctl start"
-  stop program "/var/vcap/jobs/seaweedfs-master/bin/ctl stop"
+  with pidfile /var/vcap/sys/run/bpm/seaweedfs-master/seaweedfs-master.pid
+  start program "/var/vcap/jobs/bpm/bin/bpm start seaweedfs-master"
+  stop program "/var/vcap/jobs/bpm/bin/bpm stop seaweedfs-master"
   group vcap

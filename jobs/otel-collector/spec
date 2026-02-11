@@ -1,0 +1,41 @@
+---
+name: otel-collector
+
+templates:
+  bpm.yml.erb: config/bpm.yml
+  otel-config.yml.erb: config/otel-config.yml
+  ca.pem.erb: config/ca.pem
+
+packages:
+  - otel-collector
+
+consumes:
+  - name: seaweedfs-master
+    type: seaweedfs-master
+    optional: true
+  - name: seaweedfs-filer
+    type: seaweedfs-filer
+    optional: true
+
+properties:
+  otel.otlp_endpoint:
+    description: "OTLP exporter endpoint URL"
+    default: ""
+  otel.otlp_protocol:
+    description: "OTLP protocol (grpc or http)"
+    default: grpc
+  otel.otlp_ca_cert:
+    description: "TLS CA cert for OTLP endpoint"
+    default: ""
+  otel.otlp_headers:
+    description: "Authentication headers for OTLP endpoint (key=value pairs)"
+    default: {}
+  otel.scrape_interval:
+    description: "Prometheus scrape interval"
+    default: "30s"
+  otel.enable_host_metrics:
+    description: "Enable host-level CPU/memory/disk/network metrics"
+    default: true
+  otel.metrics_port:
+    description: "Port for seaweedfs metrics scraping on this VM"
+    default: 9321

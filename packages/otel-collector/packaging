@@ -1,0 +1,4 @@
+set -e
+tar xzf otel-collector/otelcol-contrib.tar.gz
+cp otelcol-contrib ${BOSH_INSTALL_TARGET}/
+chmod +x ${BOSH_INSTALL_TARGET}/otelcol-contrib

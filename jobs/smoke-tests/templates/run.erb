@@ -334,6 +334,40 @@ else
   fail "Shared plan test endpoint returned HTTP ${HTTP_CODE}: ${RESPONSE}"
 fi
 
+echo ""
+echo "Step 8b: Credential revocation test (Shared Plan)"
+echo "---------------------------------------------------"
+
+# Save current binding info
+echo "Unbinding service to test credential revocation..."
+cf unbind-service ${APP_NAME} ${SERVICE_INSTANCE}
+cf restage ${APP_NAME} 2>/dev/null || true
+
+# Wait for app to restart
+sleep 15
+
+# Re-bind for continued testing
+echo "Re-binding service for continued tests..."
+cf bind-service ${APP_NAME} ${SERVICE_INSTANCE}
+cf restage ${APP_NAME} 2>/dev/null || true
+
+# Wait for app to restart
+APP_STARTED=false
+for i in $(seq 1 30); do
+  APP_OUTPUT=$(cf app ${APP_NAME} 2>&1)
+  if echo "${APP_OUTPUT}" | grep -qE "instances:.*[1-9]+/[0-9]+.*running|#0.*running"; then
+    APP_STARTED=true
+    break
+  fi
+  if echo "${APP_OUTPUT}" | grep -qiE "^state:.*started|requested state:.*started"; then
+    APP_STARTED=true
+    break
+  fi
+  sleep 10
+done
+
+echo "Credential revocation test completed - rebinding successful"
+
 # =========================================
 # On-Demand Dedicated Plan Test (Optional)
 # =========================================

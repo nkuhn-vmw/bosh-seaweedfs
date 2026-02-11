@@ -1,0 +1,38 @@
+<%
+  # Determine master address from link or property
+  master_address = p('seaweedfs.filer.master')
+  if_link('seaweedfs-master') do |master_link|
+    master_port = master_link.p('seaweedfs.master.port') rescue 9333
+    master_addresses = master_link.instances.map { |instance| "#{instance.address}:#{master_port}" }
+    master_address = master_addresses.join(',')
+  end
+%>
+processes:
+  - name: seaweedfs-filer
+    executable: /var/vcap/packages/seaweedfs/weed
+    args:
+      - filer
+      - -ip=<%= spec.address %>
+      - -ip.bind=<%= p('seaweedfs.filer.ip_bind') %>
+      - -port=<%= p('seaweedfs.filer.port') %>
+      - -port.grpc=<%= p('seaweedfs.filer.port_grpc') %>
+      - -master=<%= master_address %>
+      - -metricsPort=<%= p('seaweedfs.filer.metrics_port') %>
+      - -maxMB=<%= p('seaweedfs.filer.max_mb') %>
+      - -dirListLimit=<%= p('seaweedfs.filer.dir_list_limit') %>
+<% if p('seaweedfs.filer.default_replication') != "" %>
+      - -defaultReplicaPlacement=<%= p('seaweedfs.filer.default_replication') %>
+<% end %>
+<% if_p('tls.ca') do %>
+      - -security.tls.ca=/var/vcap/jobs/seaweedfs-filer/config/certs/ca.pem
+      - -security.tls.cert=/var/vcap/jobs/seaweedfs-filer/config/certs/cert.pem
+      - -security.tls.key=/var/vcap/jobs/seaweedfs-filer/config/certs/key.pem
+<% end %>
+    env:
+      GOGC: "80"
+    limits:
+      open_files: 65536
+    persistent_disk: true
+    additional_volumes:
+      - path: /var/vcap/store/seaweedfs-filer
+        writable: true

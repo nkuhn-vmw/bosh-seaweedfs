@@ -1,0 +1,42 @@
+---
+name: restore
+
+templates:
+  run.erb: bin/run
+
+packages:
+  - seaweedfs
+
+consumes:
+  - name: seaweedfs-master
+    type: seaweedfs-master
+    optional: true
+
+properties:
+  restore.backup_timestamp:
+    description: "Timestamp of backup to restore (YYYYMMDDTHHMMSS)"
+    default: ""
+  restore.source_type:
+    description: "Where to pull the backup from: local, nfs, s3"
+    default: local
+  restore.local_path:
+    description: "Local backup directory path"
+    default: /var/vcap/store/backups
+  restore.s3_endpoint:
+    description: "S3-compatible endpoint for backup source"
+    default: ""
+  restore.s3_bucket:
+    description: "S3 bucket containing backup"
+    default: ""
+  restore.s3_access_key:
+    description: "S3 access key for backup source"
+    default: ""
+  restore.s3_secret_key:
+    description: "S3 secret key for backup source"
+    default: ""
+  restore.filer_port:
+    description: "Filer port for metadata restore"
+    default: 8888
+  restore.s3_port:
+    description: "S3 gateway port for IAM restore"
+    default: 8333

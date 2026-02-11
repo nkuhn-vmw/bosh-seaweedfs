@@ -3,15 +3,20 @@ name: seaweedfs-master
 packages:
   - seaweedfs
 templates:
+  bpm.yml.erb: config/bpm.yml
   ctl.erb: bin/ctl
   pre-start.erb: bin/pre-start
   health_check.erb: bin/health_check
+  ca.pem.erb: config/certs/ca.pem
+  cert.pem.erb: config/certs/cert.pem
+  key.pem.erb: config/certs/key.pem
 
 provides:
   - name: seaweedfs-master
     type: seaweedfs-master
     properties:
       - seaweedfs.master.port
+      - seaweedfs.master.port_grpc
 
 properties:
   seaweedfs.master.port:
@@ -35,6 +40,15 @@ properties:
   seaweedfs.master.ip_bind:
     description: "IP address to bind to"
     default: "0.0.0.0"
+  tls.ca:
+    description: "CA certificate for mTLS"
+    default: ""
+  tls.certificate:
+    description: "Server certificate"
+    default: ""
+  tls.private_key:
+    description: "Server private key"
+    default: ""
   nats.tls.ca_cert:
     description: "NATS server CA certificate. When set and route_registrar is co-located, this is written to the route_registrar config directory for TLS verification."
     default: ""

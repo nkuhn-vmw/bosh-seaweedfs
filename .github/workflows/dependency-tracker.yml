@@ -1,0 +1,56 @@
+name: Dependency Tracker
+on:
+  schedule:
+    - cron: '0 8 * * 1'  # Weekly on Monday at 8 AM UTC
+  workflow_dispatch:
+
+jobs:
+  check-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Go version
+        id: go-version
+        run: |
+          CURRENT_GO=$(grep '^go ' src/seaweedfs-broker/go.mod | awk '{print $2}')
+          LATEST_GO=$(curl -s 'https://go.dev/VERSION?m=text' | head -1 | sed 's/go//')
+          echo "current=${CURRENT_GO}" >> $GITHUB_OUTPUT
+          echo "latest=${LATEST_GO}" >> $GITHUB_OUTPUT
+          if [ "${CURRENT_GO}" != "${LATEST_GO}" ]; then
+            echo "Go: ${CURRENT_GO} -> ${LATEST_GO}"
+            echo "has_update=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check SeaweedFS version
+        id: seaweedfs-version
+        run: |
+          CURRENT=$(yq '.upstream.current' config/versions.yml)
+          LATEST=$(gh api repos/seaweedfs/seaweedfs/releases/latest --jq '.tag_name')
+          echo "current=${CURRENT}" >> $GITHUB_OUTPUT
+          echo "latest=${LATEST}" >> $GITHUB_OUTPUT
+          if [ "${CURRENT}" != "${LATEST}" ]; then
+            echo "SeaweedFS: ${CURRENT} -> ${LATEST}"
+            echo "has_update=true" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check OTel Collector version
+        id: otel-version
+        run: |
+          LATEST=$(gh api repos/open-telemetry/opentelemetry-collector-releases/releases/latest --jq '.tag_name')
+          echo "latest=${LATEST}" >> $GITHUB_OUTPUT
+          echo "OTel Collector latest: ${LATEST}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create summary issue
+        if: steps.seaweedfs-version.outputs.has_update == 'true' || steps.go-version.outputs.has_update == 'true'
+        uses: peter-evans/create-issue-from-file@v5
+        with:
+          title: "Dependency updates available"
+          content-filepath: /dev/stdin
+          labels: ci-cd
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

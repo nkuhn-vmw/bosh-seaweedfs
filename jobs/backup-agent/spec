@@ -1,0 +1,55 @@
+---
+name: backup-agent
+
+templates:
+  bpm.yml.erb: config/bpm.yml
+  backup.sh.erb: bin/backup.sh
+  restore.sh.erb: bin/restore.sh
+  cron.erb: config/cron
+  pre-start.erb: bin/pre-start
+
+packages:
+  - seaweedfs
+
+consumes:
+  - name: seaweedfs-master
+    type: seaweedfs-master
+    optional: true
+
+properties:
+  backup.enabled:
+    description: "Enable scheduled backups"
+    default: false
+  backup.schedule:
+    description: "Cron expression for backup schedule"
+    default: "0 2 * * *"
+  backup.destination_type:
+    description: "Backup destination: local, nfs, s3"
+    default: local
+  backup.local_path:
+    description: "Local backup directory path"
+    default: /var/vcap/store/backups
+  backup.nfs_endpoint:
+    description: "NFS server endpoint (host:/path)"
+    default: ""
+  backup.s3_endpoint:
+    description: "S3-compatible endpoint for remote backup"
+    default: ""
+  backup.s3_bucket:
+    description: "S3 bucket for remote backup"
+    default: ""
+  backup.s3_access_key:
+    description: "S3 access key for backup destination"
+    default: ""
+  backup.s3_secret_key:
+    description: "S3 secret key for backup destination"
+    default: ""
+  backup.retention_count:
+    description: "Number of backups to retain"
+    default: 7
+  backup.filer_port:
+    description: "Filer port for metadata backup"
+    default: 8888
+  backup.s3_port:
+    description: "S3 gateway port for IAM backup"
+    default: 8333

@@ -1,0 +1,47 @@
+---
+name: upgrade-all-service-instances
+
+templates:
+  run.erb: bin/run
+
+packages: []
+
+consumes:
+  - name: seaweedfs-broker
+    type: seaweedfs-broker
+    optional: true
+
+properties:
+  upgrade.broker_url:
+    description: "Broker admin API URL (used when BOSH link not available)"
+    default: ""
+  upgrade.broker_username:
+    description: "Broker admin username"
+    default: ""
+  upgrade.broker_password:
+    description: "Broker admin password"
+    default: ""
+  upgrade.canaries:
+    description: "Number of canary instances to upgrade first"
+    default: 1
+  upgrade.max_in_flight:
+    description: "Maximum parallel upgrades after canaries"
+    default: 3
+  upgrade.fail_fast:
+    description: "Stop on first failure (true) or continue and report (false)"
+    default: true
+  bosh.url:
+    description: "BOSH Director URL"
+    default: ""
+  bosh.root_ca_cert:
+    description: "BOSH Director CA certificate"
+    default: ""
+  bosh.authentication.uaa.url:
+    description: "BOSH UAA URL"
+    default: ""
+  bosh.authentication.uaa.client_id:
+    description: "BOSH UAA client ID"
+    default: ""
+  bosh.authentication.uaa.client_secret:
+    description: "BOSH UAA client secret"
+    default: ""

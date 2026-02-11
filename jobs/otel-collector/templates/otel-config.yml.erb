@@ -1,0 +1,91 @@
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        <% if_link('seaweedfs-master') do |master| %>
+        - job_name: seaweedfs-master
+          scrape_interval: <%= p('otel.scrape_interval') %>
+          static_configs:
+            - targets:
+              <% master.instances.each do |instance| %>
+                - '<%= instance.address %>:<%= master.p('seaweedfs.master.metrics_port') rescue 9321 %>'
+              <% end %>
+              labels:
+                deployment: '<%= spec.deployment %>'
+                job: 'seaweedfs-master'
+                az: '<%= spec.az %>'
+                plan_type: 'shared'
+        <% end %>
+        <% if_link('seaweedfs-filer') do |filer| %>
+        - job_name: seaweedfs-filer
+          scrape_interval: <%= p('otel.scrape_interval') %>
+          static_configs:
+            - targets:
+              <% filer.instances.each do |instance| %>
+                - '<%= instance.address %>:<%= filer.p('seaweedfs.filer.metrics_port') rescue 9322 %>'
+              <% end %>
+              labels:
+                deployment: '<%= spec.deployment %>'
+                job: 'seaweedfs-filer'
+                az: '<%= spec.az %>'
+        <% end %>
+        - job_name: seaweedfs-volume
+          scrape_interval: <%= p('otel.scrape_interval') %>
+          static_configs:
+            - targets: ['<%= spec.address %>:<%= p('otel.metrics_port') %>']
+              labels:
+                deployment: '<%= spec.deployment %>'
+                job: 'seaweedfs-volume'
+                index: '<%= spec.index %>'
+                az: '<%= spec.az %>'
+
+  <% if p('otel.enable_host_metrics') %>
+  hostmetrics:
+    collection_interval: <%= p('otel.scrape_interval') %>
+    scrapers:
+      cpu: {}
+      memory: {}
+      disk: {}
+      network: {}
+      filesystem: {}
+  <% end %>
+
+processors:
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+  resourcedetection:
+    detectors: [env]
+  attributes:
+    actions:
+      - key: deployment
+        value: '<%= spec.deployment %>'
+        action: upsert
+      - key: instance_id
+        value: '<%= spec.id %>'
+        action: upsert
+
+exporters:
+  otlp:
+    endpoint: '<%= p('otel.otlp_endpoint') %>'
+    <% if p('otel.otlp_protocol') == 'http' %>
+    protocol: http/protobuf
+    <% end %>
+    <% if p('otel.otlp_ca_cert') != '' %>
+    tls:
+      ca_file: /var/vcap/jobs/otel-collector/config/ca.pem
+    <% end %>
+    <% otlp_headers = p('otel.otlp_headers') %>
+    <% if otlp_headers.is_a?(Hash) && !otlp_headers.empty? %>
+    headers:
+      <% otlp_headers.each do |k, v| %>
+      <%= k %>: '<%= v %>'
+      <% end %>
+    <% end %>
+
+service:
+  pipelines:
+    metrics:
+      receivers: [prometheus<%= p('otel.enable_host_metrics') ? ', hostmetrics' : '' %>]
+      processors: [resourcedetection, attributes, batch]
+      exporters: [otlp]

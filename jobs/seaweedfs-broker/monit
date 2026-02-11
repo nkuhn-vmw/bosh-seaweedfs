@@ -1,5 +1,5 @@
 check process seaweedfs-broker
-  with pidfile /var/vcap/sys/run/seaweedfs-broker/seaweedfs-broker.pid
-  start program "/var/vcap/jobs/seaweedfs-broker/bin/ctl start"
-  stop program "/var/vcap/jobs/seaweedfs-broker/bin/ctl stop"
+  with pidfile /var/vcap/sys/run/bpm/seaweedfs-broker/seaweedfs-broker.pid
+  start program "/var/vcap/jobs/bpm/bin/bpm start seaweedfs-broker"
+  stop program "/var/vcap/jobs/bpm/bin/bpm stop seaweedfs-broker"
   group vcap

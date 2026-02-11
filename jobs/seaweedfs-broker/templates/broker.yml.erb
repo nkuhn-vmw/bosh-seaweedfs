@@ -257,3 +257,16 @@ nats:
 state_store:
   type: "file"
   path: "/var/vcap/store/seaweedfs-broker/state.json"
+
+<% credhub_url = p('seaweedfs.broker.credhub.url', '') %>
+<% if !credhub_url.to_s.empty? %>
+credhub:
+  url: "<%= credhub_url %>"
+  client_id: "<%= p('seaweedfs.broker.credhub.client_id', '') %>"
+  client_secret: "<%= p('seaweedfs.broker.credhub.client_secret', '') %>"
+<% credhub_ca = p('seaweedfs.broker.credhub.ca_cert', '') %>
+<% if !credhub_ca.to_s.empty? %>
+  ca_cert: |
+<%= credhub_ca.gsub(/^/, '    ') %>
+<% end %>
+<% end %>

@@ -1,0 +1,3 @@
+# syslog-forwarder is a configuration-only job
+# rsyslog picks up config files from /etc/rsyslog.d/
+# No separate process to monitor
