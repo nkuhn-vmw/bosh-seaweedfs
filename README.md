@@ -16,6 +16,150 @@ Created by **Kuhn Labs**. This is an experimental, community-driven project.
 - **Smoke Tests**: Automated errand validates end-to-end S3 connectivity (put, get, list, delete)
 - **Tanzu Operations Manager Tile**: One-click deployment with operator-configurable forms
 
+## Architecture
+
+### Shared Cluster
+
+The tile deploys a shared SeaweedFS cluster with an S3-compatible API, service broker, and admin console. All external traffic is routed through the Cloud Foundry gorouter with TLS termination.
+
+```mermaid
+graph TB
+    subgraph "Cloud Foundry"
+        GR[GoRouter<br/>TLS Termination]
+        NATS[NATS<br/>Route Registration]
+        CC[Cloud Controller]
+    end
+
+    subgraph "SeaweedFS Tile - Shared Cluster"
+        subgraph "Data Plane"
+            M[Master<br/>:9333]
+            V1[Volume 1<br/>:8080]
+            V2[Volume 2<br/>:8080]
+            V3[Volume 3<br/>:8080]
+            F[Filer<br/>:8888]
+            S3[S3 Gateway<br/>:8333<br/>+ IAM API]
+        end
+
+        subgraph "Control Plane"
+            BR[Service Broker<br/>:8080<br/>OSB API v2.17]
+            ADM[Admin Console<br/>:23646]
+        end
+
+        RR[Route Registrar]
+    end
+
+    DEV[Developer<br/>cf create-service] --> CC
+    CC --> GR
+    APP[Application] -->|S3 API| GR
+
+    GR -->|s3.sys.domain| S3
+    GR -->|seaweedfs-broker.sys.domain| BR
+    GR -->|seaweedfs-admin.sys.domain| ADM
+
+    RR -->|mTLS| NATS
+
+    S3 --> F
+    F --> M
+    M --> V1
+    M --> V2
+    M --> V3
+
+    BR -->|Create Bucket<br/>Manage IAM| S3
+    BR -->|State| ST[(state.json)]
+
+    style GR fill:#4a9eff,color:#fff
+    style BR fill:#ff9f43,color:#fff
+    style S3 fill:#2ecc71,color:#fff
+    style ADM fill:#9b59b6,color:#fff
+    style M fill:#e74c3c,color:#fff
+```
+
+### On-Demand Dedicated Clusters
+
+When a developer provisions a dedicated plan, the broker communicates with the BOSH Director to deploy an isolated SeaweedFS cluster. Each dedicated cluster gets its own master, volume, filer, S3, and optional admin console.
+
+```mermaid
+graph TB
+    subgraph "Shared Cluster Deployment"
+        BR[Service Broker]
+    end
+
+    subgraph "BOSH"
+        DIR[BOSH Director]
+    end
+
+    subgraph "Cloud Foundry"
+        GR[GoRouter]
+        CC[Cloud Controller]
+    end
+
+    DEV[Developer<br/>cf create-service] --> CC
+    CC -->|Provision| GR
+    GR --> BR
+
+    BR -->|1. Generate Manifest<br/>2. Deploy| DIR
+
+    DIR -->|Creates| DC1
+    DIR -->|Creates| DC2
+
+    subgraph DC1["Dedicated Cluster A (Single Node)"]
+        DM1[Master]
+        DV1[Volume]
+        DF1[Filer]
+        DS1[S3 + IAM]
+    end
+
+    subgraph DC2["Dedicated Cluster B (HA)"]
+        DM2[3x Master]
+        DV2[6x Volume]
+        DF2[3x Filer]
+        DS2[S3 + IAM]
+    end
+
+    DS1 -.->|Optional Route| GR
+    DS2 -.->|Optional Route| GR
+
+    style BR fill:#ff9f43,color:#fff
+    style DIR fill:#3498db,color:#fff
+    style DC1 fill:#e8f5e9
+    style DC2 fill:#e8f5e9
+```
+
+### Service Binding & Credential Flow
+
+Each `cf bind-service` creates an isolated IAM user with bucket-scoped access on either the shared or dedicated cluster.
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant CC as Cloud Controller
+    participant BR as Service Broker
+    participant IAM as S3 Gateway (IAM API)
+    participant App as Application
+
+    Dev->>CC: cf bind-service my-app my-bucket
+    CC->>BR: PUT /v2/service_bindings/{id}
+
+    BR->>IAM: Create IAM User (cf-binding-{id})
+    IAM-->>BR: User created
+
+    BR->>IAM: Create Access Key
+    IAM-->>BR: Access Key + Secret Key
+
+    BR->>IAM: Attach Bucket Policy
+    IAM-->>BR: Policy attached
+
+    BR-->>CC: Return credentials
+    CC-->>Dev: Binding complete
+
+    App->>IAM: S3 API (access_key, secret_key)
+    Note over App,IAM: Scoped to bound bucket only
+
+    Dev->>CC: cf unbind-service my-app my-bucket
+    CC->>BR: DELETE /v2/service_bindings/{id}
+    BR->>IAM: Delete Policy + Key + User
+```
+
 ## Components
 
 | Component | Description |
