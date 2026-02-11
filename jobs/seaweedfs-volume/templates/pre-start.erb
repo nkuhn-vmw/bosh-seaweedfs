@@ -1,0 +1,23 @@
+#!/bin/bash
+set -e
+
+<%
+  nats_ca_cert = p('nats.tls.ca_cert')
+%>
+<% if nats_ca_cert != "" %>
+# Write NATS server CA cert for co-located route_registrar.
+# The routing release's route_registrar only reads the NATS server CA cert from
+# a BOSH link (nats-tls), which is unavailable in cross-deployment scenarios
+# (on-demand service instances). This pre-start writes the CA cert from properties
+# to the location route_registrar expects, before processes start.
+ROUTE_REG_CA_CERT=/var/vcap/jobs/route_registrar/config/nats/certs/server_ca.crt
+if [ -d "$(dirname "${ROUTE_REG_CA_CERT}")" ]; then
+  cat > "${ROUTE_REG_CA_CERT}" <<'CERT_EOF'
+<%= nats_ca_cert %>
+CERT_EOF
+  chmod 640 "${ROUTE_REG_CA_CERT}"
+  chown vcap:vcap "${ROUTE_REG_CA_CERT}"
+fi
+<% end %>
+
+exit 0

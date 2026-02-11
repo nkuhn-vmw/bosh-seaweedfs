@@ -5,11 +5,15 @@ releases/
 blobs/
 artifacts/
 
-# Tile build outputs (if building tile from this repo)
+# Tile build outputs
 product/
 release/
+build/
+tile-history.yml
+resources/*.tgz
 
-# Source archives (generated during build - MUST be excluded to prevent nested tarball issues)
+# Source archives and compiled binaries (generated during build)
+packages/seaweedfs-broker/seaweedfs-broker
 packages/seaweedfs-broker/seaweedfs-broker.tar.gz
 src/seaweedfs-broker/seaweedfs-broker.tar.gz
 src/**/*.tar.gz

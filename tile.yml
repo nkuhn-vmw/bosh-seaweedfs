@@ -1,0 +1,668 @@
+---
+name: seaweedfs
+icon_file: resources/icon.png
+label: SeaweedFS Object Storage
+metadata_version: 3.0
+version: "1.0.124"
+description: |
+  SeaweedFS is a distributed storage system for blobs, objects, files, and data lake.
+  This tile provides S3-compatible object storage with both shared and dedicated cluster options.
+
+# Enable service broker - required for $self accessors (UAA client for BOSH access)
+service_broker: true
+
+# Require TAS/Elastic Runtime for gorouter integration, NATS, and CF APIs
+requires_product_versions:
+  - name: cf
+    version: "~> 4.0"
+
+stemcell_criteria:
+  os: ubuntu-jammy
+  version: '1.0'
+
+# Service plan forms for operator-configurable on-demand plans
+service_plan_forms:
+  - name: on_demand_service_plans
+    label: On-Demand Service Plans
+    description: |
+      Configure on-demand SeaweedFS cluster plans that provision dedicated instances.
+      Each plan creates isolated SeaweedFS clusters for applications.
+    optional: true
+    properties:
+      - name: plan_description
+        type: string
+        label: Plan Description
+        description: Description shown to developers in the marketplace
+        configurable: true
+        default: "On-demand SeaweedFS cluster"
+      - name: deployment_type
+        type: dropdown_select
+        label: Deployment Type
+        description: |
+          Single Node: Lightweight deployment with 1 master, 1 volume server, and 1 filer.
+          Ideal for development, testing, and non-critical workloads. No data replication.
+
+          High Availability: Production-ready deployment with 3 masters, 6 volume servers,
+          and 3 filers across availability zones. Includes rack-aware replication for
+          fault tolerance and automatic failover.
+        default: single_node
+        configurable: true
+        options:
+          - name: single_node
+            label: "Single Node - Dev/Test (1 master, 1 volume, 1 filer)"
+          - name: ha
+            label: "High Availability - Production (3 masters, 6 volumes, 3 filers)"
+      - name: vm_type
+        type: vm_type_dropdown
+        label: VM Type
+        description: VM type for cluster nodes. Larger VMs provide more CPU and memory for better performance.
+        configurable: true
+      - name: disk_type
+        type: disk_type_dropdown
+        label: Persistent Disk Type
+        description: Persistent disk type for data storage. Choose based on capacity and performance requirements.
+        configurable: true
+      - name: storage_quota_gb
+        type: integer
+        label: Storage Quota (GB)
+        description: Maximum storage quota per service instance (enforced at bucket level)
+        default: 100
+        configurable: true
+        constraints:
+          min: 10
+          max: 10000
+      - name: enable_master_console_route
+        type: boolean
+        label: Enable Master Console Route
+        description: |
+          Enable external access to the Master web console via gorouter.
+          Only use if not using the admin console. Keep in mind these URLs have no auth.
+        default: false
+        configurable: true
+      - name: enable_filer_console_route
+        type: boolean
+        label: Enable Filer Console Route
+        description: |
+          Enable external access to the Filer web console via gorouter.
+          Only use if not using the admin console. Keep in mind these URLs have no auth.
+        default: false
+        configurable: true
+      - name: enable_volume_console_route
+        type: boolean
+        label: Enable Volume Console Route
+        description: |
+          Enable external access to the Volume server web console via gorouter.
+          Only use if not using the admin console. Keep in mind these URLs have no auth.
+        default: false
+        configurable: true
+      - name: enable_admin_console_route
+        type: boolean
+        label: Enable Admin Console Route
+        description: |
+          Enable external access to the Admin console via gorouter.
+          The admin console provides a password-protected management dashboard
+          for the SeaweedFS cluster with access to master, filer, volume, and S3 management.
+        default: false
+        configurable: true
+
+packages:
+  - name: seaweedfs
+    type: bosh-release
+    path: resources/seaweedfs-release.tgz
+    jobs:
+      # Shared cluster components
+      - name: seaweedfs-master
+        label: Shared Cluster - Master
+        templates:
+          - name: seaweedfs-master
+            release: seaweedfs
+          - name: route_registrar
+            release: routing
+            consumes:
+              nats-tls:
+                from: nats-tls
+                deployment: (( ..cf.deployment_name ))
+          - name: bpm
+            release: bpm
+        memory: 1024
+        ephemeral_disk: 4096
+        persistent_disk: 10240
+        instances: 1
+        cpu: 1
+        static_ip: 0
+        dynamic_ip: 1
+        max_in_flight: 1
+        properties:
+          nats:
+            tls:
+              enabled: true
+              client_cert: (( ..cf.properties.nats_client_cert.cert_pem ))
+              client_key: (( ..cf.properties.nats_client_cert.private_key_pem ))
+              ca_cert: (( ..cf.properties.nats_tls_external_cert.cert_pem ))
+          route_registrar:
+            routes:
+              - name: seaweedfs-master
+                port: 9333
+                registration_interval: 20s
+                uris:
+                  - (( .properties.master_console_route_name.value )).(( ..cf.cloud_controller.system_domain.value ))
+          seaweedfs:
+            master:
+              port: 9333
+              default_replication: (( .properties.shared_replication.value ))
+
+      - name: seaweedfs-volume
+        label: Shared Cluster - Volume
+        templates:
+          - name: seaweedfs-volume
+            release: seaweedfs
+          - name: route_registrar
+            release: routing
+            consumes:
+              nats-tls:
+                from: nats-tls
+                deployment: (( ..cf.deployment_name ))
+          - name: bpm
+            release: bpm
+        memory: 2048
+        ephemeral_disk: 4096
+        persistent_disk: 102400
+        instances: 3
+        cpu: 2
+        static_ip: 0
+        dynamic_ip: 1
+        max_in_flight: 1
+        properties:
+          nats:
+            tls:
+              enabled: true
+              client_cert: (( ..cf.properties.nats_client_cert.cert_pem ))
+              client_key: (( ..cf.properties.nats_client_cert.private_key_pem ))
+              ca_cert: (( ..cf.properties.nats_tls_external_cert.cert_pem ))
+          route_registrar:
+            routes:
+              - name: seaweedfs-volume
+                port: 8080
+                registration_interval: 20s
+                uris:
+                  - (( .properties.volume_console_route_name.value )).(( ..cf.cloud_controller.system_domain.value ))
+          seaweedfs:
+            volume:
+              max_volumes: (( .properties.shared_max_volumes.value ))
+
+      - name: seaweedfs-filer
+        label: Shared Cluster - Filer
+        templates:
+          - name: seaweedfs-filer
+            release: seaweedfs
+          - name: route_registrar
+            release: routing
+            consumes:
+              nats-tls:
+                from: nats-tls
+                deployment: (( ..cf.deployment_name ))
+          - name: bpm
+            release: bpm
+        memory: 2048
+        ephemeral_disk: 4096
+        persistent_disk: 10240
+        instances: 1
+        cpu: 2
+        static_ip: 0
+        dynamic_ip: 1
+        max_in_flight: 1
+        properties:
+          nats:
+            tls:
+              enabled: true
+              client_cert: (( ..cf.properties.nats_client_cert.cert_pem ))
+              client_key: (( ..cf.properties.nats_client_cert.private_key_pem ))
+              ca_cert: (( ..cf.properties.nats_tls_external_cert.cert_pem ))
+          route_registrar:
+            routes:
+              - name: seaweedfs-filer
+                port: 8888
+                registration_interval: 20s
+                uris:
+                  - (( .properties.filer_console_route_name.value )).(( ..cf.cloud_controller.system_domain.value ))
+          seaweedfs:
+            filer: {}
+
+      # S3 Gateway for external access (via gorouter for TLS termination)
+      - name: seaweedfs-s3
+        label: Shared Cluster - S3 Gateway
+        templates:
+          - name: seaweedfs-s3
+            release: seaweedfs
+          - name: route_registrar
+            release: routing
+            consumes:
+              nats-tls:
+                from: nats-tls
+                deployment: (( ..cf.deployment_name ))
+          - name: bpm
+            release: bpm
+        memory: 1024
+        ephemeral_disk: 4096
+        persistent_disk: 1024
+        instances: 1
+        cpu: 1
+        static_ip: 0
+        dynamic_ip: 1
+        max_in_flight: 1
+        properties:
+          nats:
+            tls:
+              enabled: true
+              client_cert: (( ..cf.properties.nats_client_cert.cert_pem ))
+              client_key: (( ..cf.properties.nats_client_cert.private_key_pem ))
+              ca_cert: (( ..cf.properties.nats_tls_external_cert.cert_pem ))
+          route_registrar:
+            routes:
+              - name: seaweedfs-s3
+                port: 8333
+                registration_interval: 20s
+                uris:
+                  - (( .properties.s3_route_name.value )).(( ..cf.cloud_controller.system_domain.value ))
+          seaweedfs:
+            s3:
+              port: 8333
+              iam:
+                enabled: true
+              config:
+                enabled: true
+                identities:
+                  - name: admin
+                    credentials:
+                      - accessKey: (( .properties.generated_s3_credentials.identity ))
+                        secretKey: (( .properties.generated_s3_credentials.password ))
+                    actions:
+                      - "Admin"
+                      - "Read"
+                      - "Write"
+
+      # Admin Console (password-protected management dashboard)
+      - name: seaweedfs-admin
+        label: Shared Cluster - Admin Console
+        templates:
+          - name: seaweedfs-admin
+            release: seaweedfs
+            consumes:
+              seaweedfs-master:
+                from: seaweedfs-master
+          - name: route_registrar
+            release: routing
+            consumes:
+              nats-tls:
+                from: nats-tls
+                deployment: (( ..cf.deployment_name ))
+          - name: bpm
+            release: bpm
+        memory: 512
+        ephemeral_disk: 2048
+        instances: 1
+        cpu: 1
+        static_ip: 0
+        dynamic_ip: 1
+        max_in_flight: 1
+        properties:
+          nats:
+            tls:
+              enabled: true
+              client_cert: (( ..cf.properties.nats_client_cert.cert_pem ))
+              client_key: (( ..cf.properties.nats_client_cert.private_key_pem ))
+              ca_cert: (( ..cf.properties.nats_tls_external_cert.cert_pem ))
+          route_registrar:
+            routes:
+              - name: seaweedfs-admin
+                port: 23646
+                registration_interval: 20s
+                uris:
+                  - (( .properties.admin_console_route_name.value )).(( ..cf.cloud_controller.system_domain.value ))
+          seaweedfs:
+            admin:
+              port: 23646
+              username: (( .properties.generated_admin_credentials.identity ))
+              password: (( .properties.generated_admin_credentials.password ))
+
+      # Service Broker
+      - name: seaweedfs-broker
+        label: Shared Cluster - Broker
+        templates:
+          - name: seaweedfs-broker
+            release: seaweedfs
+            consumes:
+              nats-tls:
+                from: nats-tls
+                deployment: (( ..cf.deployment_name ))
+          - name: route_registrar
+            release: routing
+            consumes:
+              nats-tls:
+                from: nats-tls
+                deployment: (( ..cf.deployment_name ))
+          - name: bpm
+            release: bpm
+        memory: 1024
+        ephemeral_disk: 4096
+        persistent_disk: 2048
+        instances: 1
+        cpu: 1
+        static_ip: 0
+        dynamic_ip: 1
+        max_in_flight: 1
+        properties:
+          nats:
+            tls:
+              enabled: true
+              client_cert: (( ..cf.properties.nats_client_cert.cert_pem ))
+              client_key: (( ..cf.properties.nats_client_cert.private_key_pem ))
+              ca_cert: (( ..cf.properties.nats_tls_external_cert.cert_pem ))
+          route_registrar:
+            routes:
+              - name: seaweedfs-broker
+                port: 8080
+                registration_interval: 20s
+                uris:
+                  - (( .properties.broker_route_name.value )).(( ..cf.cloud_controller.system_domain.value ))
+          seaweedfs:
+            broker:
+              port: 8080
+              auth:
+                username: (( .properties.generated_broker_credentials.identity ))
+                password: (( .properties.generated_broker_credentials.password ))
+              catalog:
+                icon_url: ""
+              shared_cluster:
+                enabled: (( .properties.shared_cluster_enabled.value ))
+                plan_name: (( .properties.shared_plan_name.value ))
+                plan_description: (( .properties.shared_plan_description.value ))
+                # S3 endpoint uses gorouter route (TLS handled by gorouter)
+                s3_endpoint: (( .properties.s3_route_name.value )).(( ..cf.cloud_controller.system_domain.value ))
+                use_ssl: true
+                access_key: (( .properties.generated_s3_credentials.identity ))
+                secret_key: (( .properties.generated_s3_credentials.password ))
+              # BOSH Director configuration for on-demand deployments
+              bosh:
+                url: https://(( $director.hostname )):25555
+                root_ca_cert: (( $director.ca_public_key ))
+                authentication:
+                  uaa:
+                    url: https://(( $director.hostname )):8443
+                    client_id: (( $self.uaa_client_name ))
+                    client_secret: (( $self.uaa_client_secret ))
+              on_demand:
+                service_name: seaweedfs
+                plans: (( .properties.on_demand_service_plans.value ))
+                stemcell_os: ubuntu-jammy
+                stemcell_version: latest
+                network: (( $self.service_network ))
+                azs: (( .properties.on_demand_azs.value ))
+              cf:
+                system_domain: (( ..cf.cloud_controller.system_domain.value ))
+                apps_domain: (( ..cf.cloud_controller.apps_domain.value ))
+                deployment_name: (( ..cf.deployment_name ))
+              # NATS TLS configuration for on-demand route registration
+              nats:
+                tls:
+                  enabled: true
+                  client_cert: (( ..cf.properties.nats_client_cert.cert_pem ))
+                  client_key: (( ..cf.properties.nats_client_cert.private_key_pem ))
+                  ca_cert: (( ..cf.properties.nats_tls_external_cert.cert_pem ))
+
+      # Register broker errand (post-deploy)
+      - name: register-broker
+        label: Errand - Register Broker
+        templates:
+          - name: register-broker
+            release: seaweedfs
+        lifecycle: errand
+        post_deploy: true
+        memory: 512
+        ephemeral_disk: 2048
+        instances: 1
+        cpu: 1
+        static_ip: 0
+        dynamic_ip: 1
+        properties:
+          cf:
+            api_url: https://api.(( ..cf.cloud_controller.system_domain.value ))
+            admin_username: (( ..cf.uaa.system_services_credentials.identity ))
+            admin_password: (( ..cf.uaa.system_services_credentials.password ))
+            skip_ssl_validation: true
+          broker:
+            name: seaweedfs
+            # Use routed URL via gorouter for stable, externally-accessible broker endpoint
+            url: https://(( .properties.broker_route_name.value )).(( ..cf.cloud_controller.system_domain.value ))
+            username: (( .properties.generated_broker_credentials.identity ))
+            password: (( .properties.generated_broker_credentials.password ))
+            enable_service_access: true
+
+      # Deregister broker errand (pre-delete)
+      - name: deregister-broker
+        label: Errand - Deregister Broker
+        templates:
+          - name: deregister-broker
+            release: seaweedfs
+        lifecycle: errand
+        pre_delete: true
+        memory: 512
+        ephemeral_disk: 2048
+        instances: 1
+        cpu: 1
+        static_ip: 0
+        dynamic_ip: 1
+        properties:
+          cf:
+            api_url: https://api.(( ..cf.cloud_controller.system_domain.value ))
+            admin_username: (( ..cf.uaa.system_services_credentials.identity ))
+            admin_password: (( ..cf.uaa.system_services_credentials.password ))
+            skip_ssl_validation: true
+          broker:
+            name: seaweedfs
+
+      # Smoke tests errand (runs after deploy)
+      - name: smoke-tests
+        label: Errand - Smoke Tests
+        templates:
+          - name: smoke-tests
+            release: seaweedfs
+        lifecycle: errand
+        post_deploy: true
+        memory: 1024
+        ephemeral_disk: 4096
+        instances: 1
+        cpu: 1
+        static_ip: 0
+        dynamic_ip: 1
+        properties:
+          cf:
+            api_url: https://api.(( ..cf.cloud_controller.system_domain.value ))
+            admin_username: (( ..cf.uaa.system_services_credentials.identity ))
+            admin_password: (( ..cf.uaa.system_services_credentials.password ))
+            skip_ssl_validation: true
+          smoke_tests:
+            service_name: seaweedfs
+            plan_name: shared
+            timeout_minutes: 10
+            cleanup: true
+            app_domain: (( ..cf.cloud_controller.apps_domain.value ))
+            test_on_demand: (( .properties.smoke_test_on_demand_enabled.value ))
+            on_demand_plan_name: (( .properties.smoke_test_on_demand_plan.value ))
+            on_demand_timeout_minutes: 30
+            on_demand_deprovision_timeout_minutes: 20
+
+  - name: bpm
+    type: bosh-release
+    path: resources/bpm-release.tgz
+
+  - name: routing
+    type: bosh-release
+    path: resources/routing-release.tgz
+
+forms:
+  - name: shared_cluster_config
+    label: Shared Cluster Configuration
+    description: |
+      Configure the shared SeaweedFS cluster that provides the 'shared' service plan.
+      The shared plan allows multiple applications to share a single SeaweedFS cluster,
+      with each application receiving an isolated S3 bucket.
+    properties:
+      - name: shared_cluster_enabled
+        type: boolean
+        label: Enable Shared Cluster Plan
+        description: |
+          Enable the shared cluster plan which provides S3 buckets on a multi-tenant
+          SeaweedFS cluster. Disable to only offer on-demand dedicated plans.
+        default: true
+      - name: shared_plan_name
+        type: string
+        label: Shared Plan Name
+        description: |
+          Name of the shared plan as shown to developers in the marketplace.
+        default: shared
+      - name: shared_plan_description
+        type: string
+        label: Shared Plan Description
+        description: |
+          Description of the shared plan shown to developers in the marketplace.
+        default: "Shared SeaweedFS cluster with dedicated bucket"
+      - name: on_demand_azs
+        type: string
+        label: On-Demand Availability Zones
+        description: |
+          Comma-separated list of availability zone names for on-demand deployments.
+          These must match the AZs configured in your BOSH cloud config for the service network.
+          Example: az1 or az1,az2,az3
+        default: az1
+      - name: s3_route_name
+        type: string
+        label: S3 Endpoint Hostname
+        description: |
+          Hostname prefix for the S3 API endpoint (combined with system domain).
+          Example: 'seaweedfs-s3' creates seaweedfs-s3.sys.example.com
+        default: seaweedfs-s3
+      - name: broker_route_name
+        type: string
+        label: Broker Endpoint Hostname
+        description: |
+          Hostname prefix for the service broker endpoint (combined with system domain).
+          Used by Cloud Foundry to register and communicate with the service broker.
+        default: seaweedfs-broker
+      - name: master_console_enabled
+        type: boolean
+        label: Enable Master Console Route
+        description: |
+          Enable external access to the Master web console via gorouter.
+          Only use if not using the admin console. Keep in mind these URLs have no auth.
+        default: false
+      - name: master_console_route_name
+        type: string
+        label: Master Console Hostname
+        description: |
+          Hostname prefix for the Master web console (combined with system domain).
+          Example: 'seaweedfs-master' creates seaweedfs-master.sys.example.com
+        default: seaweedfs-master
+      - name: filer_console_enabled
+        type: boolean
+        label: Enable Filer Console Route
+        description: |
+          Enable external access to the Filer web console via gorouter.
+          Only use if not using the admin console. Keep in mind these URLs have no auth.
+        default: false
+      - name: filer_console_route_name
+        type: string
+        label: Filer Console Hostname
+        description: |
+          Hostname prefix for the Filer web console (combined with system domain).
+          Example: 'seaweedfs-filer' creates seaweedfs-filer.sys.example.com
+        default: seaweedfs-filer
+      - name: volume_console_enabled
+        type: boolean
+        label: Enable Volume Console Route
+        description: |
+          Enable external access to the Volume server web console via gorouter.
+          Only use if not using the admin console. Keep in mind these URLs have no auth.
+        default: false
+      - name: volume_console_route_name
+        type: string
+        label: Volume Console Hostname
+        description: |
+          Hostname prefix for the Volume server web console (combined with system domain).
+          Example: 'seaweedfs-volume' creates seaweedfs-volume.sys.example.com
+        default: seaweedfs-volume
+      - name: admin_console_enabled
+        type: boolean
+        label: Enable Admin Console Route
+        description: |
+          Enable external access to the Admin console via gorouter.
+          The admin console provides a password-protected management dashboard
+          for the SeaweedFS cluster with access to master, filer, volume, and S3 management.
+        default: false
+      - name: admin_console_route_name
+        type: string
+        label: Admin Console Hostname
+        description: |
+          Hostname prefix for the Admin console (combined with system domain).
+          The admin console provides a password-protected management dashboard
+          for the SeaweedFS cluster.
+          Example: 'seaweedfs-admin' creates seaweedfs-admin.sys.example.com
+        default: seaweedfs-admin
+      - name: shared_replication
+        type: dropdown_select
+        label: Replication Strategy
+        description: Data replication strategy for fault tolerance
+        default: "001"
+        options:
+          - name: "000"
+            label: "No Replication (Development only)"
+          - name: "001"
+            label: "Same Rack - 1 replica (Standard)"
+          - name: "010"
+            label: "Different Rack - 1 replica (High Availability)"
+          - name: "100"
+            label: "Different Data Center - 1 replica (Disaster Recovery)"
+      - name: shared_max_volumes
+        type: integer
+        label: Max Volumes per Server
+        description: Maximum number of volumes each volume server can hold (affects total storage capacity)
+        default: 100
+        constraints:
+          min: 10
+          max: 1000
+      - name: generated_broker_credentials
+        type: simple_credentials
+        label: Service Broker Credentials (Auto-generated)
+        configurable: false
+      - name: generated_s3_credentials
+        type: simple_credentials
+        label: Shared Cluster S3 Credentials
+        configurable: false
+      - name: generated_admin_credentials
+        type: simple_credentials
+        label: Shared Cluster Admin Console Credentials
+        configurable: false
+  - name: smoke_test_config
+    label: Smoke Test Configuration
+    description: |
+      Configure the smoke test errand that validates SeaweedFS service functionality.
+      The smoke test pushes a test app to Cloud Foundry, binds it to a SeaweedFS
+      service instance, and validates S3 operations (put, get, list, delete).
+    properties:
+      - name: smoke_test_on_demand_enabled
+        type: boolean
+        label: Test On-Demand Plan
+        description: |
+          Enable testing of an on-demand dedicated plan in addition to the shared plan.
+          When enabled, the smoke test will create a dedicated SeaweedFS cluster,
+          bind it to the test app, and run S3 connectivity tests against it.
+          Note: On-demand provisioning triggers a BOSH deployment which can take 15-30+ minutes.
+        default: false
+      - name: smoke_test_on_demand_plan
+        type: string
+        label: On-Demand Plan Name
+        description: |
+          Name of the on-demand plan to test (must match a configured plan name
+          from the Service Plan Configuration tab). Only used when 'Test On-Demand Plan' is enabled.
+        default: ""
+        optional: true

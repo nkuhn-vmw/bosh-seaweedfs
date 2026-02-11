@@ -1,0 +1,357 @@
+---
+name: seaweedfs
+label: SeaweedFS Object Storage
+description: |
+  SeaweedFS is a distributed storage system for blobs, objects, files, and data lake.
+  This tile provides S3-compatible object storage with both shared and dedicated cluster options.
+icon_image: iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAc7SURBVHic7ZtrbBRVFMd/d3a73dJSWhAoL1EelgKKgIIYQY1RMcbXB42JxhcajQYT4weNxhgTow8/GGNiYnygxCdR0RgfMRqNigJqRJEH8hJBKAVKS+l2d7a7M8cPc2dnZnentLtdAvH+k0lm5syZe8+ZO/fec+4drKq01bB7raoqwJu3U0CAhJUGIkT5VCqwf42XC1hHcT+NxZogYMXlLIBnbv8dq8okj9YvPvwHfjQ0gJsAtpPU2E+xIRCLhGAjOe/nPQjQ5wGMGHkzb+OtZ+LJ4zFCYC1xFuCI1EMSuPdKYp/VmLKCME2EyXoNpnexOScSSaAWJCG2LH8YNfCHJK5jWIBlVdEy/5AwME4OKP+mI5ffjifxX3kSeelYHOD4g/jz8L9lAEY8YALbzX0qPYvjz+I4FYHnQeME0aJT+MYLIyAQfP+AhqEHl49kJJ4xj5ZVHfOPdRb3a/0LNJSETZLuNcLkSJqmJRw1MBLPGsONwLXIgd+z0Xj1eMJOvGDQxsMSYOzjR5b1Fq2LOqb8q/F3EZIEmJ0wDgDeBTaODxKAhQBWHF4EbASWASsB9DhgXeAqsB1Y7X+M8YBdwCqPL3Y/aM3ATuAiD1O7PeAiYA3gB8ANoCpwFVh/JL5lAMbN/eAqcF2PkQB0AguBdcA8YC0wB1g/YsCfgCHw8C8FWB3AWmBJYC3wLIATgG2BRcAPwCJgf+DhABqAl4HHPL5VwDeBrR5f+xN4CTDC5EgKcKO/kYT2OHwNBN4Cng2sPbzY1/8cwI/AP8ADgBOBhYH9ARjqt7AReB1Y6+HJqsCXgPU9PoEewFzgc+Bhj++5wE+BN4C/gZOA3YGVgd2BXYDvgH8CLYF1wNqe+18T2OTxPR/4PrDGfwi4Frgz8HbgeeBFYL3H983ABeAe4A5gDXAD8Apw/P/C8B3AJuA2YE9gL+BG4CbgauBKYJ//WOC7wBeBW4FbPL5e4DHAE4HNwLXA8/7jY/1xgU3AdcDjHt/SgLPBysDKwDeBVR7f1oAXPL7Hx/C3wL0e3y8CVwI3erxdDvwQuBj4D/B6j+8FwP+AmwMfD1wH3A2s9/heBjwL3A/c5fH9JnA+cB2wBNgNPAjcBPQH1gNrfLvAo8AO4H/Al8C3gbcB1wAXAZuBewNvBp4CngbuBi71+Pol4GtgT+A+4CnAWo8v+BoYBnwOXA18BvwHuB34vMfXCuBVwHBgPXAr0OjxDf8FXgc8AHzH4+v+R3kJuAbwB/AE8E2gH/AX4CPgJOBR4AVgfWAR4BjAO8AngMeBiwL7AjOBG4DbgY8Bp/j3hf8Dqz0+N/sbiuP4p8ADwP3Ar4BtwHaPbw3wAHA2cCewN/AscLXHlxXAE8DHgLc8vo4D1gILgT8AX/P4tBk4D7ge+ALwIrC/x9f9D/Ue8BLweeA0j+9HAl8DHgfeBdwH3A2s9fjaCNwGXAH8CfgZcAMw1+OrFvBJ4FrgTo/vvYCVwCXA98By4HpgY2CZx/cFwGnAvR6fHfgWcCLwqsc3A/g+8Crgu8DqwD+Bz4A/Ae8HzgHuBp7y+HoW+B3gNeATwJqev4HWf6jq8fQ/ABeL/Dc9niKe7gIAAAAASUVORK5CYII=
+
+product_version: "1.0.0"
+minimum_version_for_upgrade: "0.0.0"
+metadata_version: "2.0"
+
+stemcell_criteria:
+  os: ubuntu-jammy
+  version: "1.0"
+  requires_cpi: false
+
+releases:
+  - name: seaweedfs
+    version: "1.0.0"
+    file: seaweedfs-1.0.0.tgz
+  - name: bpm
+    version: "1.1.21"
+    file: bpm-1.1.21.tgz
+  - name: routing
+    version: "0.283.0"
+    file: routing-0.283.0.tgz
+
+property_blueprints:
+  - name: generated_rsa_cert_credentials
+    type: rsa_cert_credentials
+  - name: master_count
+    type: integer
+    default: 1
+    configurable: true
+  - name: volume_count
+    type: integer
+    default: 3
+    configurable: true
+  - name: replication
+    type: string
+    default: "000"
+    configurable: true
+  - name: broker_username
+    type: string
+    default: "admin"
+    configurable: true
+  - name: broker_password
+    type: secret
+    configurable: true
+  - name: s3_admin_access_key
+    type: string
+    default: "admin"
+    configurable: true
+  - name: s3_admin_secret_key
+    type: secret
+    configurable: true
+  - name: s3_route_hostname
+    type: string
+    configurable: true
+    optional: true
+  - name: broker_route_hostname
+    type: string
+    configurable: true
+    optional: true
+  - name: enable_tls
+    type: boolean
+    default: false
+    configurable: true
+
+form_types:
+  - name: seaweedfs_cluster_config
+    label: SeaweedFS Cluster Configuration
+    description: Configure the SeaweedFS cluster settings
+    property_inputs:
+      - reference: .properties.master_count
+        label: Master Node Count
+        description: Number of master nodes (1 for development, 3 for HA)
+      - reference: .properties.volume_count
+        label: Volume Node Count
+        description: Number of volume storage nodes
+      - reference: .properties.replication
+        label: Replication Type
+        description: "Replication strategy (000=none, 001=same rack, 010=diff rack, 100=diff DC)"
+
+  - name: seaweedfs_broker_config
+    label: Service Broker Configuration
+    description: Configure the SeaweedFS Service Broker
+    property_inputs:
+      - reference: .properties.broker_username
+        label: Broker Username
+        description: Username for service broker authentication
+      - reference: .properties.broker_password
+        label: Broker Password
+        description: Password for service broker authentication
+
+  - name: seaweedfs_networking
+    label: Networking
+    description: Configure network settings and route registration
+    property_inputs:
+      - reference: .properties.s3_route_hostname
+        label: S3 Route Hostname
+        description: Hostname for S3 endpoint route (e.g., s3.apps.example.com)
+      - reference: .properties.broker_route_hostname
+        label: Broker Route Hostname
+        description: Hostname for service broker route (e.g., seaweedfs-broker.apps.example.com)
+      - reference: .properties.enable_tls
+        label: Enable TLS
+        description: Enable TLS for all endpoints
+
+job_types:
+  - name: seaweedfs-master
+    resource_label: SeaweedFS Master
+    templates:
+      - name: seaweedfs-master
+        release: seaweedfs
+      - name: bpm
+        release: bpm
+    resource_definitions:
+      - name: ram
+        type: integer
+        default: 1024
+      - name: ephemeral_disk
+        type: integer
+        default: 4096
+      - name: persistent_disk
+        type: integer
+        default: 10240
+      - name: cpu
+        type: integer
+        default: 1
+    static_ip: 0
+    dynamic_ip: 1
+    max_in_flight: 1
+    instance_definition:
+      name: instances
+      type: integer
+      default: 1
+      configurable: true
+    property_blueprints:
+      - name: vm_credentials
+        type: salted_credentials
+    manifest: |
+      seaweedfs:
+        master:
+          port: 9333
+          default_replication: (( .properties.replication.value ))
+
+  - name: seaweedfs-volume
+    resource_label: SeaweedFS Volume
+    templates:
+      - name: seaweedfs-volume
+        release: seaweedfs
+      - name: bpm
+        release: bpm
+    resource_definitions:
+      - name: ram
+        type: integer
+        default: 2048
+      - name: ephemeral_disk
+        type: integer
+        default: 4096
+      - name: persistent_disk
+        type: integer
+        default: 102400
+      - name: cpu
+        type: integer
+        default: 2
+    static_ip: 0
+    dynamic_ip: 1
+    max_in_flight: 1
+    instance_definition:
+      name: instances
+      type: integer
+      default: 3
+      configurable: true
+    property_blueprints:
+      - name: vm_credentials
+        type: salted_credentials
+    manifest: |
+      seaweedfs:
+        volume:
+          master: "(( ..seaweedfs-master.first_ip )):9333"
+          max_volumes: 100
+
+  - name: seaweedfs-filer
+    resource_label: SeaweedFS Filer
+    templates:
+      - name: seaweedfs-filer
+        release: seaweedfs
+      - name: bpm
+        release: bpm
+    resource_definitions:
+      - name: ram
+        type: integer
+        default: 2048
+      - name: ephemeral_disk
+        type: integer
+        default: 4096
+      - name: persistent_disk
+        type: integer
+        default: 10240
+      - name: cpu
+        type: integer
+        default: 2
+    static_ip: 0
+    dynamic_ip: 1
+    max_in_flight: 1
+    instance_definition:
+      name: instances
+      type: integer
+      default: 1
+      configurable: true
+    property_blueprints:
+      - name: vm_credentials
+        type: salted_credentials
+    manifest: |
+      seaweedfs:
+        filer:
+          master: "(( ..seaweedfs-master.first_ip )):9333"
+
+  - name: seaweedfs-s3
+    resource_label: SeaweedFS S3 Gateway
+    templates:
+      - name: seaweedfs-s3
+        release: seaweedfs
+      - name: bpm
+        release: bpm
+      - name: route_registrar
+        release: routing
+        consumes:
+          nats:
+            from: nats
+            deployment: cf
+    resource_definitions:
+      - name: ram
+        type: integer
+        default: 1024
+      - name: ephemeral_disk
+        type: integer
+        default: 4096
+      - name: cpu
+        type: integer
+        default: 1
+    static_ip: 0
+    dynamic_ip: 1
+    max_in_flight: 1
+    instance_definition:
+      name: instances
+      type: integer
+      default: 1
+      configurable: true
+    property_blueprints:
+      - name: vm_credentials
+        type: salted_credentials
+    manifest: |
+      seaweedfs:
+        s3:
+          filer: "(( ..seaweedfs-filer.first_ip )):8888"
+          port: 8333
+          tls:
+            enabled: (( .properties.enable_tls.value ))
+          config:
+            enabled: true
+            identities:
+              - name: admin
+                credentials:
+                  - accessKey: (( .properties.s3_admin_access_key.value ))
+                    secretKey: (( .properties.s3_admin_secret_key.value ))
+                actions:
+                  - Admin
+                  - Read
+                  - Write
+      route_registrar:
+        routes:
+          - name: seaweedfs-s3
+            port: 8333
+            registration_interval: 20s
+            uris:
+              - (( .properties.s3_route_hostname.value ))
+
+  - name: seaweedfs-broker
+    resource_label: SeaweedFS Service Broker
+    templates:
+      - name: seaweedfs-broker
+        release: seaweedfs
+      - name: bpm
+        release: bpm
+      - name: route_registrar
+        release: routing
+        consumes:
+          nats:
+            from: nats
+            deployment: cf
+    resource_definitions:
+      - name: ram
+        type: integer
+        default: 1024
+      - name: ephemeral_disk
+        type: integer
+        default: 4096
+      - name: persistent_disk
+        type: integer
+        default: 1024
+      - name: cpu
+        type: integer
+        default: 1
+    static_ip: 0
+    dynamic_ip: 1
+    max_in_flight: 1
+    instance_definition:
+      name: instances
+      type: integer
+      default: 1
+      configurable: true
+    property_blueprints:
+      - name: vm_credentials
+        type: salted_credentials
+    manifest: |
+      seaweedfs:
+        broker:
+          port: 8080
+          auth:
+            username: (( .properties.broker_username.value ))
+            password: (( .properties.broker_password.value ))
+          shared_cluster:
+            s3_endpoint: "(( ..seaweedfs-s3.first_ip )):8333"
+            access_key: (( .properties.s3_admin_access_key.value ))
+            secret_key: (( .properties.s3_admin_secret_key.value ))
+          tls:
+            enabled: (( .properties.enable_tls.value ))
+          catalog:
+            plans:
+              - id: shared-bucket
+                name: shared
+                description: "Shared SeaweedFS cluster with dedicated bucket"
+                free: true
+                plan_type: shared
+      route_registrar:
+        routes:
+          - name: seaweedfs-broker
+            port: 8080
+            registration_interval: 20s
+            uris:
+              - (( .properties.broker_route_hostname.value ))
+
+post_deploy_errands:
+  - name: register-broker
+    label: Register Service Broker
+    description: Register the SeaweedFS service broker with Cloud Foundry
+
+pre_delete_errands:
+  - name: deregister-broker
+    label: Deregister Service Broker
+    description: Deregister the SeaweedFS service broker from Cloud Foundry
+
+runtime_configs: []
