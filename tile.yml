@@ -777,37 +777,6 @@ forms:
         type: simple_credentials
         label: Shared Cluster Admin Console Credentials
         configurable: false
-  - name: security_config
-    label: Security Configuration
-    description: |
-      Configure TLS certificates for inter-component mTLS communication.
-      Certificates are auto-generated and managed by BOSH/CredHub.
-    properties:
-      - name: seaweedfs_ca
-        type: rsa_cert_credentials
-        label: SeaweedFS Internal CA
-        configurable: false
-        optional: false
-      - name: seaweedfs_master_tls
-        type: rsa_cert_credentials
-        label: SeaweedFS Master TLS Certificate
-        configurable: false
-        optional: false
-      - name: seaweedfs_volume_tls
-        type: rsa_cert_credentials
-        label: SeaweedFS Volume TLS Certificate
-        configurable: false
-        optional: false
-      - name: seaweedfs_filer_tls
-        type: rsa_cert_credentials
-        label: SeaweedFS Filer TLS Certificate
-        configurable: false
-        optional: false
-      - name: seaweedfs_s3_tls
-        type: rsa_cert_credentials
-        label: SeaweedFS S3 TLS Certificate
-        configurable: false
-        optional: false
   - name: smoke_test_config
     label: Smoke Test Configuration
     description: |
