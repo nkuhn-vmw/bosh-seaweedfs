@@ -34,9 +34,9 @@ The tile deploys a shared SeaweedFS cluster with an S3-compatible API, service b
                        cf create-service
                             |
                             v
-                    +---------------+
-                    |  Cloud  Controller  |
-                    +-------+-------+
+                    +------------------+
+                    | Cloud Controller |
+                    +--------+---------+
                             |
                             v
    +----------------------------------------------------+
