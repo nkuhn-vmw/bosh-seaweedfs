@@ -3,5 +3,6 @@ set -e -x
 
 # Install AWS CLI v2
 unzip backup-tools/awscli-exe-linux-x86_64.zip -d /tmp/awscli-install
+chmod +x /tmp/awscli-install/aws/install
 /tmp/awscli-install/aws/install --install-dir "${BOSH_INSTALL_TARGET}" --bin-dir "${BOSH_INSTALL_TARGET}/bin"
 rm -rf /tmp/awscli-install
