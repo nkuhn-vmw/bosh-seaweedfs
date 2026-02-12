@@ -1,0 +1,6 @@
+#!/bin/bash
+# Wrapper that changes to the config directory before running weed.
+# SeaweedFS searches for filer.toml in "." first, and BOSH renders
+# it to /var/vcap/jobs/seaweedfs-filer/config/filer.toml.
+cd /var/vcap/jobs/seaweedfs-filer/config
+exec /var/vcap/packages/seaweedfs/weed "$@"

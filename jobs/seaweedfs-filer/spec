@@ -6,6 +6,7 @@ templates:
   bpm.yml.erb: config/bpm.yml
   ctl.erb: bin/ctl
   pre-start.erb: bin/pre-start
+  weed-wrapper.erb: bin/weed-wrapper
   filer.toml.erb: config/filer.toml
   health_check.erb: bin/health_check
   ca.pem.erb: config/certs/ca.pem

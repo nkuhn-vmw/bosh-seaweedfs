@@ -9,7 +9,7 @@
 %>
 processes:
   - name: seaweedfs-filer
-    executable: /var/vcap/packages/seaweedfs/weed
+    executable: /var/vcap/jobs/seaweedfs-filer/bin/weed-wrapper
     args:
       - filer
       - -ip=<%= spec.address %>
@@ -28,6 +28,3 @@ processes:
     limits:
       open_files: 65536
     persistent_disk: true
-    additional_volumes:
-      - path: /etc/seaweedfs
-        writable: false
