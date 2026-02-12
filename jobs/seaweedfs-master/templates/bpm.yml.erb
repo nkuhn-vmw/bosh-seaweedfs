@@ -27,11 +27,6 @@ processes:
 <% if peers_arg != "" %>
       - -peers=<%= peers_arg %>
 <% end %>
-<% if_p('tls.ca') do %>
-      - -security.tls.ca=/var/vcap/jobs/seaweedfs-master/config/certs/ca.pem
-      - -security.tls.cert=/var/vcap/jobs/seaweedfs-master/config/certs/cert.pem
-      - -security.tls.key=/var/vcap/jobs/seaweedfs-master/config/certs/key.pem
-<% end %>
     env:
       GOGC: "80"
     limits:

@@ -23,11 +23,6 @@ processes:
 <% if p('seaweedfs.filer.default_replication') != "" %>
       - -defaultReplicaPlacement=<%= p('seaweedfs.filer.default_replication') %>
 <% end %>
-<% if_p('tls.ca') do %>
-      - -security.tls.ca=/var/vcap/jobs/seaweedfs-filer/config/certs/ca.pem
-      - -security.tls.cert=/var/vcap/jobs/seaweedfs-filer/config/certs/cert.pem
-      - -security.tls.key=/var/vcap/jobs/seaweedfs-filer/config/certs/key.pem
-<% end %>
     env:
       GOGC: "80"
     limits:

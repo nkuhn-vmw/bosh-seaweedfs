@@ -31,11 +31,6 @@ processes:
 <% if !p('seaweedfs.s3.iam.enabled') %>
       - -iam=false
 <% end %>
-<% if_p('tls.ca') do %>
-      - -security.tls.ca=/var/vcap/jobs/seaweedfs-s3/config/certs/ca.pem
-      - -security.tls.cert=/var/vcap/jobs/seaweedfs-s3/config/certs/cert.pem
-      - -security.tls.key=/var/vcap/jobs/seaweedfs-s3/config/certs/key.pem
-<% end %>
     env:
       GOGC: "80"
     limits:
