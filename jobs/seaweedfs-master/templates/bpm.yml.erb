@@ -27,7 +27,6 @@ processes:
 <% if peers_arg != "" %>
       - -peers=<%= peers_arg %>
 <% end %>
-      - -rack=<%= spec.az %>
 <% if_p('tls.ca') do %>
       - -security.tls.ca=/var/vcap/jobs/seaweedfs-master/config/certs/ca.pem
       - -security.tls.cert=/var/vcap/jobs/seaweedfs-master/config/certs/cert.pem
