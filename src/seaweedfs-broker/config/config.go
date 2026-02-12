@@ -40,6 +40,15 @@ type Config struct {
 
 	// CredHub configuration for credential storage
 	CredHub CredHubConfig `yaml:"credhub"`
+
+	// Syslog configuration for on-demand deployments
+	Syslog SyslogConfig `yaml:"syslog"`
+
+	// OTEL configuration for on-demand deployments
+	OTEL OTELConfig `yaml:"otel"`
+
+	// Backup configuration for on-demand deployments
+	Backup BackupConfig `yaml:"backup"`
 }
 
 // CFConfig holds Cloud Foundry configuration
@@ -202,6 +211,37 @@ type CredHubConfig struct {
 	CACert       string `yaml:"ca_cert"`
 }
 
+// SyslogConfig holds syslog forwarding configuration for on-demand deployments
+type SyslogConfig struct {
+	Address       string `yaml:"address"`
+	Transport     string `yaml:"transport"`
+	TLSEnabled    bool   `yaml:"tls_enabled"`
+	CACert        string `yaml:"ca_cert"`
+	PermittedPeer string `yaml:"permitted_peer"`
+}
+
+// OTELConfig holds OpenTelemetry configuration for on-demand deployments
+type OTELConfig struct {
+	OTLPEndpoint      string `yaml:"otlp_endpoint"`
+	OTLPProtocol      string `yaml:"otlp_protocol"`
+	OTLPCACert        string `yaml:"otlp_ca_cert"`
+	ScrapeInterval    string `yaml:"scrape_interval"`
+	EnableHostMetrics bool   `yaml:"enable_host_metrics"`
+}
+
+// BackupConfig holds backup configuration for on-demand deployments
+type BackupConfig struct {
+	Enabled         bool   `yaml:"enabled"`
+	Schedule        string `yaml:"schedule"`
+	DestinationType string `yaml:"destination_type"`
+	LocalPath       string `yaml:"local_path"`
+	S3Endpoint      string `yaml:"s3_endpoint"`
+	S3Bucket        string `yaml:"s3_bucket"`
+	S3AccessKey     string `yaml:"s3_access_key"`
+	S3SecretKey     string `yaml:"s3_secret_key"`
+	RetentionCount  int    `yaml:"retention_count"`
+}
+
 // Load loads configuration from a YAML file
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
@@ -229,6 +269,27 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.SharedCluster.Region == "" {
 		cfg.SharedCluster.Region = "us-east-1"
+	}
+	if cfg.Syslog.Transport == "" {
+		cfg.Syslog.Transport = "tcp"
+	}
+	if cfg.OTEL.OTLPProtocol == "" {
+		cfg.OTEL.OTLPProtocol = "grpc"
+	}
+	if cfg.OTEL.ScrapeInterval == "" {
+		cfg.OTEL.ScrapeInterval = "30s"
+	}
+	if cfg.Backup.Schedule == "" {
+		cfg.Backup.Schedule = "0 2 * * *"
+	}
+	if cfg.Backup.DestinationType == "" {
+		cfg.Backup.DestinationType = "local"
+	}
+	if cfg.Backup.LocalPath == "" {
+		cfg.Backup.LocalPath = "/var/vcap/store/backups"
+	}
+	if cfg.Backup.RetentionCount == 0 {
+		cfg.Backup.RetentionCount = 7
 	}
 
 	return cfg, nil

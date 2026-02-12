@@ -1,0 +1,33 @@
+---
+# Default OpsManager product configuration for CI integration testing.
+# Configures minimal shared cluster with sane defaults.
+product-name: seaweedfs
+product-properties:
+  # Shared cluster config
+  .properties.shared_cluster_enabled:
+    value: true
+  .properties.shared_plan_name:
+    value: shared
+  .properties.shared_plan_description:
+    value: "Shared SeaweedFS cluster with dedicated bucket"
+  .properties.on_demand_azs:
+    value: az1
+  .properties.s3_route_name:
+    value: seaweedfs-s3
+  .properties.broker_route_name:
+    value: seaweedfs-broker
+  .properties.shared_replication:
+    value: "000"
+  .properties.shared_max_volumes:
+    value: 100
+  # Smoke test config
+  .properties.smoke_test_on_demand_enabled:
+    value: false
+  # Syslog / OTEL (disabled by default for CI)
+  .properties.syslog_address:
+    value: ""
+  .properties.otlp_endpoint:
+    value: ""
+  # Backup (disabled by default for CI)
+  .properties.backup_enabled:
+    value: false

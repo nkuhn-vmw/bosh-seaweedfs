@@ -481,10 +481,37 @@ packages:
                 stemcell_version: latest
                 network: (( $self.service_network ))
                 azs: (( .properties.on_demand_azs.value ))
+                syslog:
+                  address: (( .properties.syslog_address.value ))
+                  transport: (( .properties.syslog_transport.value ))
+                  tls_enabled: (( .properties.syslog_tls_enabled.value ))
+                  ca_cert: (( .properties.syslog_ca_cert.value ))
+                  permitted_peer: (( .properties.syslog_permitted_peer.value ))
+                otel:
+                  otlp_endpoint: (( .properties.otlp_endpoint.value ))
+                  otlp_protocol: (( .properties.otlp_protocol.value ))
+                  otlp_ca_cert: (( .properties.otlp_ca_cert.value ))
+                  scrape_interval: (( .properties.otel_scrape_interval.value ))
+                  enable_host_metrics: (( .properties.otel_host_metrics.value ))
+                backup:
+                  enabled: (( .properties.backup_enabled.value ))
+                  schedule: (( .properties.backup_schedule.value ))
+                  destination_type: (( .properties.backup_destination_type.value ))
+                  s3_endpoint: (( .properties.backup_s3_endpoint.value ))
+                  s3_bucket: (( .properties.backup_s3_bucket.value ))
+                  s3_access_key: (( .properties.backup_s3_access_key.value ))
+                  s3_secret_key: (( .properties.backup_s3_secret_key.value ))
+                  retention_count: (( .properties.backup_retention_count.value ))
               cf:
                 system_domain: (( ..cf.cloud_controller.system_domain.value ))
                 apps_domain: (( ..cf.cloud_controller.apps_domain.value ))
                 deployment_name: (( ..cf.deployment_name ))
+              # CredHub integration for credential storage
+              credhub:
+                url: (( .properties.credhub_url.value ))
+                client_id: (( .properties.credhub_client_id.value ))
+                client_secret: (( .properties.credhub_client_secret.value ))
+                ca_cert: (( .properties.credhub_ca_cert.value ))
               # NATS TLS configuration for on-demand route registration
               nats:
                 tls:
@@ -867,6 +894,35 @@ forms:
         label: Enable Host Metrics
         description: "Collect host-level CPU, memory, disk, and network metrics"
         default: true
+  - name: credhub_config
+    label: CredHub Integration
+    description: |
+      Configure CredHub for secure credential storage. When enabled, service binding
+      credentials are stored in CredHub and referenced by CredHub path rather than
+      returned directly. This provides enhanced security for credential management.
+    properties:
+      - name: credhub_url
+        type: string
+        label: CredHub URL
+        description: "CredHub API URL (e.g., https://credhub.service.cf.internal:8844). Leave empty to disable."
+        default: ""
+        optional: true
+      - name: credhub_client_id
+        type: string
+        label: CredHub Client ID
+        description: "UAA client ID for CredHub authentication"
+        default: ""
+        optional: true
+      - name: credhub_client_secret
+        type: secret
+        label: CredHub Client Secret
+        description: "UAA client secret for CredHub authentication"
+        optional: true
+      - name: credhub_ca_cert
+        type: text
+        label: CredHub CA Certificate
+        description: "CA certificate for CredHub TLS verification"
+        optional: true
   - name: backup_config
     label: Backup
     description: Configure backup for all SeaweedFS clusters

@@ -27,14 +27,23 @@ echo "[$(date)] Backing up filer metadata..."
     echo "[$(date)] Warning: filer metadata backup failed"
   }
 
-# 2. IAM configuration export
+# 2. Volume data export (all file content via filer)
+echo "[$(date)] Backing up volume data via filer..."
+/var/vcap/packages/seaweedfs/weed filer.backup \
+  -filer="${FILER_URL}" \
+  -target="${BACKUP_DIR}/filer-data/" \
+  -timeAgo=87600h 2>&1 || {
+    echo "[$(date)] Warning: volume data backup failed"
+  }
+
+# 3. IAM configuration export
 echo "[$(date)] Backing up IAM configuration..."
 curl -sf "http://${S3_URL}/iam/api/v1/users" \
   > "${BACKUP_DIR}/iam-users.json" 2>/dev/null || echo '[]' > "${BACKUP_DIR}/iam-users.json"
 curl -sf "http://${S3_URL}/iam/api/v1/policies" \
   > "${BACKUP_DIR}/iam-policies.json" 2>/dev/null || echo '[]' > "${BACKUP_DIR}/iam-policies.json"
 
-# 3. Record backup metadata
+# 4. Record backup metadata
 cat > "${BACKUP_DIR}/backup-metadata.json" <<METADATA
 {
   "timestamp": "${TIMESTAMP}",
@@ -44,7 +53,7 @@ cat > "${BACKUP_DIR}/backup-metadata.json" <<METADATA
 }
 METADATA
 
-# 4. Ship to remote destination if configured
+# 5. Ship to remote destination if configured
 <% if p('backup.destination_type') == 's3' && p('backup.s3_endpoint') != '' %>
 echo "[$(date)] Uploading backup to S3..."
 export AWS_ACCESS_KEY_ID="<%= p('backup.s3_access_key') %>"
@@ -65,7 +74,7 @@ cp -r "${BACKUP_DIR}" "${NFS_MOUNT}/${DEPLOYMENT}/" 2>&1 || {
 umount "${NFS_MOUNT}" 2>/dev/null || true
 <% end %>
 
-# 5. Retention: prune old backups
+# 6. Retention: prune old backups
 echo "[$(date)] Pruning backups beyond retention count (<%= p('backup.retention_count') %>)..."
 BACKUP_BASE="<%= p('backup.local_path') %>/${DEPLOYMENT}"
 if [ -d "${BACKUP_BASE}" ]; then

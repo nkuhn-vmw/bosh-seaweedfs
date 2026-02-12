@@ -60,7 +60,21 @@ else
   echo "[$(date)] Warning: No filer metadata found in backup"
 fi
 
-# 2. Restore IAM configuration
+# 2. Restore volume data via filer
+if [ -d "${BACKUP_DIR}/filer-data/" ]; then
+  echo "[$(date)] Restoring volume data via filer..."
+  /var/vcap/packages/seaweedfs/weed filer.backup \
+    -filer="${FILER_URL}" \
+    -source="${BACKUP_DIR}/filer-data/" \
+    -restore || {
+      echo "[$(date)] ERROR: volume data restore failed"
+      exit 1
+    }
+else
+  echo "[$(date)] Warning: No volume data found in backup"
+fi
+
+# 3. Restore IAM configuration
 if [ -f "${BACKUP_DIR}/iam-users.json" ]; then
   echo "[$(date)] Restoring IAM users..."
   curl -sf -X POST "http://${S3_URL}/iam/api/v1/users" \

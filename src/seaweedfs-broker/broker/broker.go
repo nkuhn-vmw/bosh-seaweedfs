@@ -1325,6 +1325,85 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 		)
 	}
 
+	// Build conditional syslog-forwarder job YAML (added to all instance groups when configured)
+	syslogJob := ""
+	if b.config.Syslog.Address != "" {
+		syslogCACertYAML := ""
+		if b.config.Syslog.CACert != "" {
+			syslogCACertYAML = fmt.Sprintf("\n        ca_cert: |\n%s", formatCertForYAML(b.config.Syslog.CACert, 10))
+		}
+		syslogJob = fmt.Sprintf(`
+  - name: syslog-forwarder
+    release: %s
+    properties:
+      syslog:
+        address: "%s"
+        transport: "%s"
+        tls_enabled: %v%s
+        permitted_peer: "%s"`,
+			b.config.BOSH.ReleaseName,
+			b.config.Syslog.Address,
+			b.config.Syslog.Transport,
+			b.config.Syslog.TLSEnabled,
+			syslogCACertYAML,
+			b.config.Syslog.PermittedPeer,
+		)
+	}
+
+	// Build conditional otel-collector job YAML (added to master, volume, filer when configured)
+	otelJob := ""
+	if b.config.OTEL.OTLPEndpoint != "" {
+		otelCACertYAML := ""
+		if b.config.OTEL.OTLPCACert != "" {
+			otelCACertYAML = fmt.Sprintf("\n        otlp_ca_cert: |\n%s", formatCertForYAML(b.config.OTEL.OTLPCACert, 10))
+		}
+		otelJob = fmt.Sprintf(`
+  - name: otel-collector
+    release: %s
+    properties:
+      otel:
+        otlp_endpoint: "%s"
+        otlp_protocol: "%s"%s
+        scrape_interval: "%s"
+        enable_host_metrics: %v`,
+			b.config.BOSH.ReleaseName,
+			b.config.OTEL.OTLPEndpoint,
+			b.config.OTEL.OTLPProtocol,
+			otelCACertYAML,
+			b.config.OTEL.ScrapeInterval,
+			b.config.OTEL.EnableHostMetrics,
+		)
+	}
+
+	// Build conditional backup-agent job YAML (added to filer only when enabled)
+	backupJob := ""
+	if b.config.Backup.Enabled {
+		backupJob = fmt.Sprintf(`
+  - name: backup-agent
+    release: %s
+    properties:
+      backup:
+        enabled: true
+        schedule: "%s"
+        destination_type: "%s"
+        local_path: "%s"
+        s3_endpoint: "%s"
+        s3_bucket: "%s"
+        s3_access_key: "%s"
+        s3_secret_key: "%s"
+        retention_count: %d`,
+			b.config.BOSH.ReleaseName,
+			b.config.Backup.Schedule,
+			b.config.Backup.DestinationType,
+			b.config.Backup.LocalPath,
+			b.config.Backup.S3Endpoint,
+			b.config.Backup.S3Bucket,
+			b.config.Backup.S3AccessKey,
+			b.config.Backup.S3SecretKey,
+			b.config.Backup.RetentionCount,
+		)
+	}
+
 	// Build the master instance group jobs section
 	masterConsoleHost := ""
 	masterJobsSection := fmt.Sprintf(`  jobs:
@@ -1335,11 +1414,17 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
         master:
           port: 9333
           default_replication: "%s"
+      tls:
+        ca: ((seaweedfs-ca.certificate))
+        certificate: ((seaweedfs-master-tls.certificate))
+        private_key: ((seaweedfs-master-tls.private_key))
   - name: bpm
     release: bpm`,
 		b.config.BOSH.ReleaseName,
 		cfg.Replication,
 	)
+	masterJobsSection += syslogJob
+	masterJobsSection += otelJob
 
 	if canRouteRegister && s3RouteHost != "" && cfg.EnableMasterRoute {
 		masterConsoleHost = fmt.Sprintf("seaweedfs-console-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
@@ -1363,10 +1448,18 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 	filerJobsSection := fmt.Sprintf(`  jobs:
   - name: seaweedfs-filer
     release: %s
+    properties:
+      tls:
+        ca: ((seaweedfs-ca.certificate))
+        certificate: ((seaweedfs-filer-tls.certificate))
+        private_key: ((seaweedfs-filer-tls.private_key))
   - name: bpm
     release: bpm`,
 		b.config.BOSH.ReleaseName,
 	)
+	filerJobsSection += syslogJob
+	filerJobsSection += otelJob
+	filerJobsSection += backupJob
 
 	if canRouteRegister && s3RouteHost != "" && cfg.EnableFilerRoute {
 		filerHost = fmt.Sprintf("seaweedfs-filer-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
@@ -1390,10 +1483,17 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 	volumeJobsSection := fmt.Sprintf(`  jobs:
   - name: seaweedfs-volume
     release: %s
+    properties:
+      tls:
+        ca: ((seaweedfs-ca.certificate))
+        certificate: ((seaweedfs-volume-tls.certificate))
+        private_key: ((seaweedfs-volume-tls.private_key))
   - name: bpm
     release: bpm`,
 		b.config.BOSH.ReleaseName,
 	)
+	volumeJobsSection += syslogJob
+	volumeJobsSection += otelJob
 
 	if canRouteRegister && s3RouteHost != "" && cfg.EnableVolumeRoute {
 		volumeHost = fmt.Sprintf("seaweedfs-volume-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
@@ -1432,12 +1532,17 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
               - Admin
               - Read
               - Write
+      tls:
+        ca: ((seaweedfs-ca.certificate))
+        certificate: ((seaweedfs-s3-tls.certificate))
+        private_key: ((seaweedfs-s3-tls.private_key))
   - name: bpm
     release: bpm`,
 		b.config.BOSH.ReleaseName,
 		instance.AdminAccessKey,
 		instance.AdminSecretKey,
 	)
+	s3JobsSection += syslogJob
 
 	// Add route_registrar to S3 instance group
 	if canRouteRegister && s3RouteHost != "" {
@@ -1472,6 +1577,7 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 		b.config.BOSH.ReleaseName,
 		instance.AdminPassword,
 	)
+	adminJobsSection += syslogJob
 
 	if canRouteRegister && cfg.EnableAdminRoute {
 		adminHost = fmt.Sprintf("seaweedfs-admin-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
@@ -1489,6 +1595,67 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 			adminHost,
 		)
 	}
+
+	// BOSH certificate variables for auto-generated mTLS
+	variablesSection := fmt.Sprintf(`variables:
+- name: seaweedfs-ca
+  type: certificate
+  options:
+    is_ca: true
+    common_name: SeaweedFS CA
+- name: seaweedfs-master-tls
+  type: certificate
+  options:
+    ca: seaweedfs-ca
+    common_name: seaweedfs-master
+    alternative_names:
+    - "*.seaweedfs-master.%s.%s.bosh"
+    - "seaweedfs-master.%s.%s.bosh"
+    extended_key_usage:
+    - server_auth
+    - client_auth
+- name: seaweedfs-volume-tls
+  type: certificate
+  options:
+    ca: seaweedfs-ca
+    common_name: seaweedfs-volume
+    alternative_names:
+    - "*.seaweedfs-volume.%s.%s.bosh"
+    - "seaweedfs-volume.%s.%s.bosh"
+    extended_key_usage:
+    - server_auth
+    - client_auth
+- name: seaweedfs-filer-tls
+  type: certificate
+  options:
+    ca: seaweedfs-ca
+    common_name: seaweedfs-filer
+    alternative_names:
+    - "*.seaweedfs-filer.%s.%s.bosh"
+    - "seaweedfs-filer.%s.%s.bosh"
+    extended_key_usage:
+    - server_auth
+    - client_auth
+- name: seaweedfs-s3-tls
+  type: certificate
+  options:
+    ca: seaweedfs-ca
+    common_name: seaweedfs-s3
+    alternative_names:
+    - "*.seaweedfs-s3.%s.%s.bosh"
+    - "seaweedfs-s3.%s.%s.bosh"
+    extended_key_usage:
+    - server_auth
+    - client_auth`,
+		cfg.Network, instance.DeploymentName,
+		cfg.Network, instance.DeploymentName,
+		cfg.Network, instance.DeploymentName,
+		cfg.Network, instance.DeploymentName,
+		cfg.Network, instance.DeploymentName,
+		cfg.Network, instance.DeploymentName,
+		cfg.Network, instance.DeploymentName,
+		cfg.Network, instance.DeploymentName,
+	)
 
 	manifest := fmt.Sprintf(`---
 name: %s
@@ -1554,6 +1721,8 @@ instance_groups:
   networks:
   - name: %s
 %s
+
+%s
 `,
 		instance.DeploymentName,
 		releasesSection,
@@ -1585,6 +1754,7 @@ instance_groups:
 		toYAMLArray(cfg.AZs),
 		cfg.Network,
 		adminJobsSection,
+		variablesSection,
 	)
 
 	return []byte(manifest)

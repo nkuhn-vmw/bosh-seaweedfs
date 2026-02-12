@@ -226,6 +226,66 @@ properties:
     description: "Version of the routing release to use for on-demand deployments"
     default: "latest"
 
+  # Syslog forwarding configuration for on-demand deployments
+  seaweedfs.broker.on_demand.syslog.address:
+    description: "Syslog drain host:port for on-demand clusters (leave empty to disable)"
+    default: ""
+  seaweedfs.broker.on_demand.syslog.transport:
+    description: "Transport protocol for syslog (tcp, udp, relp)"
+    default: "tcp"
+  seaweedfs.broker.on_demand.syslog.tls_enabled:
+    description: "Enable TLS for syslog transport on on-demand clusters"
+    default: false
+  seaweedfs.broker.on_demand.syslog.ca_cert:
+    description: "CA certificate for TLS syslog on on-demand clusters"
+    default: ""
+  seaweedfs.broker.on_demand.syslog.permitted_peer:
+    description: "Permitted peer for TLS verification on on-demand clusters"
+    default: ""
+
+  # OpenTelemetry configuration for on-demand deployments
+  seaweedfs.broker.on_demand.otel.otlp_endpoint:
+    description: "OTLP exporter endpoint for on-demand clusters (leave empty to disable)"
+    default: ""
+  seaweedfs.broker.on_demand.otel.otlp_protocol:
+    description: "OTLP protocol (grpc or http) for on-demand clusters"
+    default: "grpc"
+  seaweedfs.broker.on_demand.otel.otlp_ca_cert:
+    description: "TLS CA certificate for OTLP endpoint on on-demand clusters"
+    default: ""
+  seaweedfs.broker.on_demand.otel.scrape_interval:
+    description: "Metrics scrape interval for on-demand clusters (e.g. 30s, 1m)"
+    default: "30s"
+  seaweedfs.broker.on_demand.otel.enable_host_metrics:
+    description: "Enable host-level CPU/memory/disk metrics on on-demand clusters"
+    default: true
+
+  # Backup configuration for on-demand deployments
+  seaweedfs.broker.on_demand.backup.enabled:
+    description: "Enable scheduled backups on on-demand clusters"
+    default: false
+  seaweedfs.broker.on_demand.backup.schedule:
+    description: "Cron expression for backup schedule on on-demand clusters"
+    default: "0 2 * * *"
+  seaweedfs.broker.on_demand.backup.destination_type:
+    description: "Backup destination for on-demand clusters: local, nfs, s3"
+    default: "local"
+  seaweedfs.broker.on_demand.backup.s3_endpoint:
+    description: "S3-compatible endpoint for on-demand backup storage"
+    default: ""
+  seaweedfs.broker.on_demand.backup.s3_bucket:
+    description: "S3 bucket for on-demand backup storage"
+    default: ""
+  seaweedfs.broker.on_demand.backup.s3_access_key:
+    description: "S3 access key for on-demand backup destination"
+    default: ""
+  seaweedfs.broker.on_demand.backup.s3_secret_key:
+    description: "S3 secret key for on-demand backup destination"
+    default: ""
+  seaweedfs.broker.on_demand.backup.retention_count:
+    description: "Number of backups to retain on on-demand clusters"
+    default: 7
+
   # CredHub integration for per-binding credential storage
   seaweedfs.broker.credhub.url:
     description: "CredHub API URL (e.g., https://credhub.service.cf.internal:8844)"

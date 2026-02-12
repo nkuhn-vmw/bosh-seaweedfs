@@ -34,6 +34,10 @@ instance_groups:
               port: 9333
               default_replication: "000"
               volume_size_limit_mb: 30000
+          tls:
+            ca: ((seaweedfs-ca.certificate))
+            certificate: ((seaweedfs-master-tls.certificate))
+            private_key: ((seaweedfs-master-tls.private_key))
 
   - name: seaweedfs-volume
     instances: 3
@@ -51,6 +55,10 @@ instance_groups:
             volume:
               master: "((seaweedfs_master_address)):9333"
               max_volumes: 100
+          tls:
+            ca: ((seaweedfs-ca.certificate))
+            certificate: ((seaweedfs-volume-tls.certificate))
+            private_key: ((seaweedfs-volume-tls.private_key))
 
   - name: seaweedfs-filer
     instances: 1
@@ -67,6 +75,10 @@ instance_groups:
           seaweedfs:
             filer:
               master: "((seaweedfs_master_address)):9333"
+          tls:
+            ca: ((seaweedfs-ca.certificate))
+            certificate: ((seaweedfs-filer-tls.certificate))
+            private_key: ((seaweedfs-filer-tls.private_key))
 
   - name: seaweedfs-s3
     instances: 1
@@ -82,9 +94,62 @@ instance_groups:
           seaweedfs:
             s3:
               filer: "((seaweedfs_filer_address)):8888"
+          tls:
+            ca: ((seaweedfs-ca.certificate))
+            certificate: ((seaweedfs-s3-tls.certificate))
+            private_key: ((seaweedfs-s3-tls.private_key))
 
 variables:
   - name: seaweedfs_master_address
     type: value
   - name: seaweedfs_filer_address
     type: value
+  - name: seaweedfs-ca
+    type: certificate
+    options:
+      is_ca: true
+      common_name: SeaweedFS CA
+  - name: seaweedfs-master-tls
+    type: certificate
+    options:
+      ca: seaweedfs-ca
+      common_name: seaweedfs-master
+      alternative_names:
+        - "*.seaweedfs-master.default.seaweedfs.bosh"
+        - "seaweedfs-master.default.seaweedfs.bosh"
+      extended_key_usage:
+        - server_auth
+        - client_auth
+  - name: seaweedfs-volume-tls
+    type: certificate
+    options:
+      ca: seaweedfs-ca
+      common_name: seaweedfs-volume
+      alternative_names:
+        - "*.seaweedfs-volume.default.seaweedfs.bosh"
+        - "seaweedfs-volume.default.seaweedfs.bosh"
+      extended_key_usage:
+        - server_auth
+        - client_auth
+  - name: seaweedfs-filer-tls
+    type: certificate
+    options:
+      ca: seaweedfs-ca
+      common_name: seaweedfs-filer
+      alternative_names:
+        - "*.seaweedfs-filer.default.seaweedfs.bosh"
+        - "seaweedfs-filer.default.seaweedfs.bosh"
+      extended_key_usage:
+        - server_auth
+        - client_auth
+  - name: seaweedfs-s3-tls
+    type: certificate
+    options:
+      ca: seaweedfs-ca
+      common_name: seaweedfs-s3
+      alternative_names:
+        - "*.seaweedfs-s3.default.seaweedfs.bosh"
+        - "seaweedfs-s3.default.seaweedfs.bosh"
+      extended_key_usage:
+        - server_auth
+        - client_auth

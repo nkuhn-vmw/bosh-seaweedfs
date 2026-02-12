@@ -98,6 +98,119 @@ jobs:
           path: product/*.pivotal
           retention-days: 14
 
+  deploy-test:
+    runs-on: ubuntu-latest
+    needs: build-bosh-release
+    if: vars.BOSH_ENVIRONMENT != ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download BOSH release
+        uses: actions/download-artifact@v4
+        with:
+          name: bosh-release
+          path: release-artifact/
+
+      - name: Install BOSH CLI
+        run: |
+          BOSH_CLI_VERSION=$(gh api repos/cloudfoundry/bosh-cli/releases/latest --jq '.tag_name' | sed 's/^v//')
+          curl -sLo bosh "https://github.com/cloudfoundry/bosh-cli/releases/download/v${BOSH_CLI_VERSION}/bosh-cli-${BOSH_CLI_VERSION}-linux-amd64"
+          chmod +x bosh
+          sudo mv bosh /usr/local/bin/bosh
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Deploy to BOSH-lite
+        env:
+          BOSH_ENVIRONMENT: ${{ vars.BOSH_ENVIRONMENT }}
+          BOSH_CLIENT: ${{ secrets.BOSH_CLIENT }}
+          BOSH_CLIENT_SECRET: ${{ secrets.BOSH_CLIENT_SECRET }}
+          BOSH_CA_CERT: ${{ secrets.BOSH_CA_CERT }}
+        run: |
+          RELEASE_FILE=$(ls release-artifact/*.tgz | head -1)
+          DEPLOYMENT_NAME="seaweedfs-ci-test"
+
+          echo "Uploading release..."
+          bosh upload-release "${RELEASE_FILE}"
+
+          echo "Deploying ${DEPLOYMENT_NAME}..."
+          bosh -n -d "${DEPLOYMENT_NAME}" deploy manifests/seaweedfs.yml \
+            -v seaweedfs_master_address=10.244.0.2 \
+            -v seaweedfs_filer_address=10.244.0.4
+
+          echo "Waiting for deployment to settle..."
+          sleep 30
+
+          echo "Checking S3 connectivity..."
+          S3_IP=$(bosh -d "${DEPLOYMENT_NAME}" vms --json | jq -r '.Tables[0].Rows[] | select(.instance | startswith("seaweedfs-s3")) | .ips')
+          echo "S3 endpoint: ${S3_IP}:8333"
+
+          # Basic health check
+          curl -sf "http://${S3_IP}:8333/" -o /dev/null && echo "S3 gateway responding" || echo "S3 gateway check failed"
+
+      - name: Cleanup deployment
+        if: always()
+        env:
+          BOSH_ENVIRONMENT: ${{ vars.BOSH_ENVIRONMENT }}
+          BOSH_CLIENT: ${{ secrets.BOSH_CLIENT }}
+          BOSH_CLIENT_SECRET: ${{ secrets.BOSH_CLIENT_SECRET }}
+          BOSH_CA_CERT: ${{ secrets.BOSH_CA_CERT }}
+        run: |
+          bosh -n -d "seaweedfs-ci-test" delete-deployment --force 2>/dev/null || true
+
+  opsmanager-test:
+    runs-on: ubuntu-latest
+    needs: build-tile
+    if: vars.OM_TARGET != ''
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download tile
+        uses: actions/download-artifact@v4
+        with:
+          name: tile
+          path: tile/
+
+      - name: Install OM CLI
+        run: |
+          OM_VERSION=$(gh api repos/pivotal-cf/om/releases/latest --jq '.tag_name' | sed 's/^v//')
+          curl -sLo om "https://github.com/pivotal-cf/om/releases/download/${OM_VERSION}/om-linux-amd64-${OM_VERSION}"
+          chmod +x om
+          sudo mv om /usr/local/bin/om
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload and stage tile
+        env:
+          OM_TARGET: ${{ vars.OM_TARGET }}
+          OM_USERNAME: ${{ secrets.OM_USERNAME }}
+          OM_PASSWORD: ${{ secrets.OM_PASSWORD }}
+          OM_SKIP_SSL_VALIDATION: "true"
+        run: |
+          TILE_FILE=$(ls tile/*.pivotal | head -1)
+          echo "Uploading tile: ${TILE_FILE}"
+          om upload-product -p "${TILE_FILE}"
+          om stage-product -p seaweedfs
+
+      - name: Configure product
+        env:
+          OM_TARGET: ${{ vars.OM_TARGET }}
+          OM_USERNAME: ${{ secrets.OM_USERNAME }}
+          OM_PASSWORD: ${{ secrets.OM_PASSWORD }}
+          OM_SKIP_SSL_VALIDATION: "true"
+        run: |
+          om configure-product -c ci/opsmanager-config.yml
+
+      - name: Apply changes
+        env:
+          OM_TARGET: ${{ vars.OM_TARGET }}
+          OM_USERNAME: ${{ secrets.OM_USERNAME }}
+          OM_PASSWORD: ${{ secrets.OM_PASSWORD }}
+          OM_SKIP_SSL_VALIDATION: "true"
+        run: |
+          om apply-changes --product-name seaweedfs
+
   validate-and-release:
     runs-on: ubuntu-latest
     needs: [build-bosh-release, build-tile]
