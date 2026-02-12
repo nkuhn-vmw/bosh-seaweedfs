@@ -1,6 +1,14 @@
 #!/bin/bash
 set -e
 
+# Copy filer.toml to a location SeaweedFS searches for config files.
+# SeaweedFS looks in: ".", "$HOME/.seaweedfs/", "/usr/local/etc/seaweedfs/", "/etc/seaweedfs/"
+# BOSH renders the template to /var/vcap/jobs/seaweedfs-filer/config/ which is not searched.
+mkdir -p /etc/seaweedfs
+cp /var/vcap/jobs/seaweedfs-filer/config/filer.toml /etc/seaweedfs/filer.toml
+chmod 640 /etc/seaweedfs/filer.toml
+chown vcap:vcap /etc/seaweedfs/filer.toml
+
 <%
   nats_ca_cert = p('nats.tls.ca_cert')
 %>

@@ -28,3 +28,6 @@ processes:
     limits:
       open_files: 65536
     persistent_disk: true
+    additional_volumes:
+      - path: /etc/seaweedfs
+        writable: false
