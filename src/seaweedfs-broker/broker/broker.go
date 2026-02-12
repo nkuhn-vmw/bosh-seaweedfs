@@ -1367,7 +1367,9 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
         admin:
           port: 23646
           username: admin
-          password: %s`,
+          password: %s
+  - name: bpm
+    release: bpm`,
 		b.config.BOSH.ReleaseName,
 		instance.AdminPassword,
 	)
