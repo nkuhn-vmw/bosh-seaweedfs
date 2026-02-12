@@ -6,158 +6,148 @@ Created by **Kuhn Labs**. This is an experimental, community-driven project.
 
 ## Features
 
-- **Distributed Object Storage**: SeaweedFS master, volume, filer, and S3 gateway servers
-- **S3-Compatible API**: Full S3 gateway with IAM-based credential management
-- **Per-Binding IAM Credentials**: Each service binding gets isolated IAM users and access keys via SeaweedFS's embedded IAM API
-- **Open Service Broker**: Provision shared buckets or dedicated clusters on-demand via the OSB API
-- **On-Demand Dedicated Clusters**: Provision isolated SeaweedFS clusters via BOSH with configurable sizing (single-node or HA)
-- **Admin Console**: Password-protected management dashboard for the shared cluster
-- **Cloud Foundry Integration**: Route registration via gorouter for S3, broker, and management console endpoints
-- **Smoke Tests**: Automated errand validates end-to-end S3 connectivity (put, get, list, delete)
-- **Tanzu Operations Manager Tile**: One-click deployment with operator-configurable forms
+- **S3-Compatible Object Storage** -- SeaweedFS master, volume, filer, and S3 gateway with full S3 API
+- **Per-Binding IAM Credentials** -- Each `cf bind-service` creates isolated IAM users with bucket-scoped access keys via SeaweedFS's embedded IAM API
+- **Shared Bucket Plan** -- Developers get dedicated S3 buckets on a shared cluster with synchronous provisioning
+- **On-Demand Dedicated Clusters** -- Isolated SeaweedFS clusters provisioned via BOSH (single-node or HA) with async lifecycle management
+- **Admin Console** -- Password-protected `weed admin` dashboard for cluster management and monitoring
+- **Cloud Foundry Route Registration** -- S3, broker, and console endpoints exposed through gorouter with NATS mTLS
+- **On-Demand Route Registration** -- Dedicated clusters register routes via property-based NATS config (no cross-deployment links needed)
+- **CredHub Integration** -- Optional secure credential storage for service binding secrets
+- **OpenTelemetry Metrics** -- Built-in otel-collector scrapes Prometheus metrics from all SeaweedFS components and exports via OTLP
+- **Syslog Forwarding** -- Configurable log drain to external syslog endpoints with TLS support
+- **Backup & Restore** -- Scheduled backups to local disk, NFS, or S3-compatible storage with configurable retention
+- **Upgrade All Service Instances** -- Errand to roll updates across all on-demand dedicated clusters
+- **Smoke Tests** -- Automated errand validates end-to-end S3 operations (put, get, list, delete) for both shared and on-demand plans
+- **CI/CD Pipeline** -- GitHub Actions watches upstream SeaweedFS releases, builds BOSH release + tile, and publishes GitHub Releases
+- **Tanzu Operations Manager Tile** -- One-click deployment with operator-configurable forms
 
 ## Architecture
 
 ### Shared Cluster
 
-The tile deploys a shared SeaweedFS cluster with an S3-compatible API, service broker, and admin console. All external traffic is routed through the Cloud Foundry gorouter with TLS termination.
+The tile deploys a shared SeaweedFS cluster with an S3-compatible API, service broker, and admin console. All external traffic routes through the Cloud Foundry gorouter with TLS termination.
 
-```mermaid
-graph TB
-    subgraph "Cloud Foundry"
-        GR[GoRouter<br/>TLS Termination]
-        NATS[NATS<br/>Route Registration]
-        CC[Cloud Controller]
-    end
+```
+                         Developer
+                            |
+                       cf create-service
+                            |
+                            v
+                    +---------------+
+                    |  Cloud  Controller  |
+                    +-------+-------+
+                            |
+                            v
+   +----------------------------------------------------+
+   |                    GoRouter                         |
+   |               (TLS Termination)                     |
+   +------+----------------+----------------+-----------+
+          |                |                |
+   broker.sys.dom   s3.sys.dom    admin.sys.dom
+          |                |                |
+          v                v                v
+   +-----------+    +------------+   +------------+
+   |  Broker   |    | S3 Gateway |   |   Admin    |
+   |  (OSB)    |    |  + IAM API |   |  Console   |
+   +-----+-----+    +-----+------+   +------------+
+         |                |
+    Create Bucket    S3 API Requests
+    Manage IAM            |
+         |                v
+         |          +-----------+
+         +--------->|   Filer   |
+                    +-----+-----+
+                          |
+                    +-----+-----+
+                    |  Master   |
+                    +--+--+--+--+
+                       |  |  |
+                 +-----+  |  +------+
+                 v        v         v
+            +--------+ +--------+ +--------+
+            |Volume 1| |Volume 2| |Volume 3|
+            +--------+ +--------+ +--------+
 
-    subgraph "SeaweedFS Tile - Shared Cluster"
-        subgraph "Data Plane"
-            M[Master<br/>:9333]
-            V1[Volume 1<br/>:8080]
-            V2[Volume 2<br/>:8080]
-            V3[Volume 3<br/>:8080]
-            F[Filer<br/>:8888]
-            S3[S3 Gateway<br/>:8333<br/>+ IAM API]
-        end
-
-        subgraph "Control Plane"
-            BR[Service Broker<br/>:8080<br/>OSB API v2.17]
-            ADM[Admin Console<br/>:23646]
-        end
-
-        RR[Route Registrar]
-    end
-
-    DEV[Developer<br/>cf create-service] --> CC
-    CC --> GR
-    APP[Application] -->|S3 API| GR
-
-    GR -->|s3.sys.domain| S3
-    GR -->|seaweedfs-broker.sys.domain| BR
-    GR -->|seaweedfs-admin.sys.domain| ADM
-
-    RR -->|mTLS| NATS
-
-    S3 --> F
-    F --> M
-    M --> V1
-    M --> V2
-    M --> V3
-
-    BR -->|Create Bucket<br/>Manage IAM| S3
-    BR -->|State| ST[(state.json)]
-
-    style GR fill:#4a9eff,color:#fff
-    style BR fill:#ff9f43,color:#fff
-    style S3 fill:#2ecc71,color:#fff
-    style ADM fill:#9b59b6,color:#fff
-    style M fill:#e74c3c,color:#fff
+   Shared Cluster also includes:
+     Route Registrar --> NATS (mTLS)
+     OTel Collector  --> OTLP Endpoint
+     Syslog Forwarder --> External Syslog
+     Backup Agent    --> Local/NFS/S3
 ```
 
 ### On-Demand Dedicated Clusters
 
-When a developer provisions a dedicated plan, the broker communicates with the BOSH Director to deploy an isolated SeaweedFS cluster. Each dedicated cluster gets its own master, volume, filer, S3, and optional admin console.
+When a developer provisions a dedicated plan, the broker deploys an isolated SeaweedFS cluster via the BOSH Director. Each dedicated cluster gets its own master, volume, filer, S3 gateway, and admin console.
 
-```mermaid
-graph TB
-    subgraph "Shared Cluster Deployment"
-        BR[Service Broker]
-    end
-
-    subgraph "BOSH"
-        DIR[BOSH Director]
-    end
-
-    subgraph "Cloud Foundry"
-        GR[GoRouter]
-        CC[Cloud Controller]
-    end
-
-    DEV[Developer<br/>cf create-service] --> CC
-    CC -->|Provision| GR
-    GR --> BR
-
-    BR -->|1. Generate Manifest<br/>2. Deploy| DIR
-
-    DIR -->|Creates| DC1
-    DIR -->|Creates| DC2
-
-    subgraph DC1["Dedicated Cluster A (Single Node)"]
-        DM1[Master]
-        DV1[Volume]
-        DF1[Filer]
-        DS1[S3 + IAM]
-    end
-
-    subgraph DC2["Dedicated Cluster B (HA)"]
-        DM2[3x Master]
-        DV2[6x Volume]
-        DF2[3x Filer]
-        DS2[S3 + IAM]
-    end
-
-    DS1 -.->|Optional Route| GR
-    DS2 -.->|Optional Route| GR
-
-    style BR fill:#ff9f43,color:#fff
-    style DIR fill:#3498db,color:#fff
-    style DC1 fill:#e8f5e9
-    style DC2 fill:#e8f5e9
+```
+   Developer                     BOSH
+   cf create-service             Director
+        |                           ^
+        v                           |
+   Cloud Controller          2. Deploy Manifest
+        |                           |
+        v                           |
+     GoRouter               +------+------+
+        |                   |   Broker    |
+        +------------------>| 1. Generate |
+                            |   Manifest  |
+                            +------+------+
+                                   |
+              +--------------------+--------------------+
+              |                                         |
+              v                                         v
+   +---------------------+              +---------------------+
+   | Dedicated Cluster A |              | Dedicated Cluster B |
+   |   (Single Node)     |              |       (HA)          |
+   |                     |              |                     |
+   |  Master (1)         |              |  Master (3)         |
+   |  Volume (1)         |              |  Volume (6)         |
+   |  Filer  (1)         |              |  Filer  (3)         |
+   |  S3 + IAM           |              |  S3 + IAM           |
+   |  Admin              |              |  Admin              |
+   |  BPM                |              |  BPM                |
+   +---------------------+              +---------------------+
+        |                                    |
+        +--- Optional Route --> GoRouter <---+
 ```
 
 ### Service Binding & Credential Flow
 
 Each `cf bind-service` creates an isolated IAM user with bucket-scoped access on either the shared or dedicated cluster.
 
-```mermaid
-sequenceDiagram
-    participant Dev as Developer
-    participant CC as Cloud Controller
-    participant BR as Service Broker
-    participant IAM as S3 Gateway (IAM API)
-    participant App as Application
-
-    Dev->>CC: cf bind-service my-app my-bucket
-    CC->>BR: PUT /v2/service_bindings/{id}
-
-    BR->>IAM: Create IAM User (cf-binding-{id})
-    IAM-->>BR: User created
-
-    BR->>IAM: Create Access Key
-    IAM-->>BR: Access Key + Secret Key
-
-    BR->>IAM: Attach Bucket Policy
-    IAM-->>BR: Policy attached
-
-    BR-->>CC: Return credentials
-    CC-->>Dev: Binding complete
-
-    App->>IAM: S3 API (access_key, secret_key)
-    Note over App,IAM: Scoped to bound bucket only
-
-    Dev->>CC: cf unbind-service my-app my-bucket
-    CC->>BR: DELETE /v2/service_bindings/{id}
-    BR->>IAM: Delete Policy + Key + User
+```
+   Developer            Cloud           Service          S3 Gateway
+                      Controller        Broker           (IAM API)
+      |                  |                |                  |
+      | cf bind-service  |                |                  |
+      |----------------->|                |                  |
+      |                  | PUT /v2/...    |                  |
+      |                  |--------------->|                  |
+      |                  |                |                  |
+      |                  |                | Create IAM User  |
+      |                  |                |----------------->|
+      |                  |                |       OK         |
+      |                  |                |<-----------------|
+      |                  |                |                  |
+      |                  |                | Create Access Key|
+      |                  |                |----------------->|
+      |                  |                | Key + Secret     |
+      |                  |                |<-----------------|
+      |                  |                |                  |
+      |                  |                | Attach Policy    |
+      |                  |                |----------------->|
+      |                  |                |       OK         |
+      |                  |                |<-----------------|
+      |                  |                |                  |
+      |                  |   Credentials  |                  |
+      |                  |<---------------|                  |
+      |  Binding done    |                |                  |
+      |<-----------------|                |                  |
+      |                  |                |                  |
+      |        Application uses S3 API with access_key      |
+      |        (scoped to bound bucket only)                 |
+      |----------------------------------------------------->|
 ```
 
 ## Components
@@ -165,15 +155,20 @@ sequenceDiagram
 | Component | Description |
 |-----------|-------------|
 | **seaweedfs-master** | Master server managing cluster topology and volume allocation |
-| **seaweedfs-volume** | Volume server storing actual file data |
-| **seaweedfs-filer** | Filer server providing POSIX-like file system interface |
-| **seaweedfs-s3** | S3-compatible API gateway with embedded IAM |
-| **seaweedfs-admin** | Password-protected admin console for cluster management |
-| **seaweedfs-broker** | Open Service Broker for Cloud Foundry integration |
-| **route-registrar** | Registers routes with Cloud Foundry gorouter |
+| **seaweedfs-volume** | Volume server storing actual file data with rack-aware placement |
+| **seaweedfs-filer** | Filer server providing POSIX-like file system interface (leveldb2 backend) |
+| **seaweedfs-s3** | S3-compatible API gateway with embedded IAM for credential management |
+| **seaweedfs-admin** | Password-protected admin console for cluster monitoring and management |
+| **seaweedfs-broker** | Open Service Broker (v2.17) for Cloud Foundry with shared and dedicated plans |
+| **route-registrar** | Registers routes with Cloud Foundry gorouter via NATS mTLS |
 | **register-broker** | Post-deploy errand to register the service broker with CF |
 | **deregister-broker** | Pre-delete errand to deregister the service broker |
-| **smoke-tests** | Errand that validates S3 operations end-to-end |
+| **smoke-tests** | Errand that validates S3 operations end-to-end for shared and on-demand plans |
+| **otel-collector** | OpenTelemetry Collector that scrapes Prometheus metrics and exports via OTLP |
+| **syslog-forwarder** | Forwards SeaweedFS logs to an external syslog endpoint |
+| **backup-agent** | Scheduled backups of filer metadata and IAM config to local/NFS/S3 |
+| **restore** | Errand to restore from a backup snapshot |
+| **upgrade-all-service-instances** | Errand to roll BOSH updates across all on-demand dedicated clusters |
 
 ## Quick Start
 
@@ -181,16 +176,16 @@ sequenceDiagram
 
 ```bash
 # Build just the BOSH release
-./scripts/build-release.sh 1.0.125
+./scripts/build-release.sh 1.0.137
 
 # Build the full Tanzu tile (includes BOSH release + dependencies)
 ./scripts/build-tile.sh
 
 # Build tile with a specific version
-./scripts/build-tile.sh 1.0.125
+./scripts/build-tile.sh 1.0.137
 
 # Build tile using a pre-built release
-./scripts/build-tile.sh --release releases/seaweedfs-1.0.125.tgz
+./scripts/build-tile.sh --release releases/seaweedfs-1.0.137.tgz
 ```
 
 The tile build script auto-increments the version if none is specified. Output goes to `product/seaweedfs-<version>.pivotal`.
@@ -227,6 +222,7 @@ The SeaweedFS service broker implements the [Open Service Broker API](https://ww
 - Generates unique IAM user and access keys per binding via SeaweedFS IAM API
 - Bucket-scoped IAM policies restrict each binding to its own bucket
 - Credentials are automatically cleaned up on unbind (user, access key, and policy deleted)
+- Optional CredHub integration for secure credential storage
 - Synchronous provisioning
 - Ideal for development and small workloads
 
@@ -238,9 +234,10 @@ The SeaweedFS service broker implements the [Open Service Broker API](https://ww
   - **Single Node** (dev/test): 1 master, 1 volume, 1 filer
   - **High Availability** (production): 3 masters, 6 volumes, 3 filers
 - Configurable VM types, persistent disk types, and storage quotas
-- Optional route registration for master, filer, volume, and admin console endpoints
+- Optional route registration for S3, master, filer, volume, and admin console endpoints
 - Per-binding IAM credentials on the dedicated cluster
 - Automatic admin credential generation
+- BPM process management on all instance groups
 
 ### Using the Service Broker
 
@@ -249,7 +246,7 @@ The SeaweedFS service broker implements the [Open Service Broker API](https://ww
 cf create-service seaweedfs shared my-bucket
 
 # Create a dedicated cluster (on-demand plan names are operator-configured)
-cf create-service seaweedfs dedicated-small my-cluster
+cf create-service seaweedfs "Dedicated S3 Cluster" my-cluster
 
 # Bind to an application
 cf bind-service my-app my-bucket
@@ -282,9 +279,11 @@ For dedicated clusters with route registration enabled, bindings also include ma
 ```json
 {
   "credentials": {
-    "master_url": "https://master-<instance>.sys.example.com",
-    "filer_url": "https://filer-<instance>.sys.example.com",
-    "admin_url": "https://admin-<instance>.sys.example.com"
+    "console_url": "https://seaweedfs-console-abc12345.sys.example.com",
+    "filer_url": "https://seaweedfs-filer-abc12345.sys.example.com",
+    "admin_url": "https://seaweedfs-admin-abc12345.sys.example.com",
+    "admin_username": "admin",
+    "admin_password": "auto-generated-password"
   }
 }
 ```
@@ -293,7 +292,7 @@ For dedicated clusters with route registration enabled, bindings also include ma
 
 ### Route Registration
 
-The tile registers routes with the Cloud Foundry gorouter. All routes are individually configurable and can be enabled/disabled:
+The tile registers routes with the Cloud Foundry gorouter. All routes are individually configurable:
 
 | Route | Default Hostname | Description |
 |-------|-----------------|-------------|
@@ -305,6 +304,8 @@ The tile registers routes with the Cloud Foundry gorouter. All routes are indivi
 | Admin Console | `seaweedfs-admin` | Password-protected admin dashboard |
 
 Routes are registered on the system domain (e.g., `s3.sys.example.com`). NATS mTLS is used for route communication.
+
+For on-demand dedicated clusters, route registration uses property-based NATS configuration (machines, port, user/password, TLS certs) since cross-deployment BOSH links are not available.
 
 ### TLS/SSL
 
@@ -353,6 +354,26 @@ Operators can define multiple on-demand plans, each with:
 | Storage Quota (GB) | Maximum storage per instance (10-10,000 GB) |
 | Console Route Flags | Enable/disable route registration for master, filer, volume, and admin consoles |
 
+### Observability
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| OTLP Endpoint | OpenTelemetry collector export endpoint | (disabled) |
+| OTLP Protocol | gRPC or HTTP | gRPC |
+| Scrape Interval | Prometheus scrape interval | 30s |
+| Host Metrics | Enable CPU/memory/disk/network metrics | Enabled |
+| Syslog Address | External syslog drain host:port | (disabled) |
+| Syslog TLS | Enable TLS for syslog transport | Disabled |
+
+### Backup & Restore
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| Enable Backups | Toggle scheduled backups | Disabled |
+| Backup Schedule | Cron expression | `0 2 * * *` (2 AM daily) |
+| Destination | local, nfs, or s3 | local |
+| Retention Count | Number of backups to keep | 7 |
+
 ### Smoke Test Configuration
 
 | Setting | Description | Default |
@@ -382,7 +403,7 @@ Operators can define multiple on-demand plans, each with:
 | `seaweedfs.volume.master` | Master server address | "localhost:9333" |
 | `seaweedfs.volume.max_volumes` | Max volumes | 100 |
 | `seaweedfs.volume.data_center` | Data center name | "" |
-| `seaweedfs.volume.rack` | Rack name | "" |
+| `seaweedfs.volume.rack` | Rack name (auto-set from AZ) | "" |
 | `seaweedfs.volume.metrics_port` | Prometheus metrics port | 9325 |
 
 ### Filer Server
@@ -414,8 +435,8 @@ Operators can define multiple on-demand plans, each with:
 | Property | Description | Default |
 |----------|-------------|---------|
 | `seaweedfs.admin.port` | HTTP port | 23646 |
-| `seaweedfs.admin.auth.username` | Basic auth username | "" |
-| `seaweedfs.admin.auth.password` | Basic auth password | "" |
+| `seaweedfs.admin.username` | Auth username | "admin" |
+| `seaweedfs.admin.password` | Auth password | "" |
 
 ### Service Broker
 
@@ -444,7 +465,7 @@ SeaweedFS uses a 3-digit replication type:
 
 ## Monitoring
 
-All components expose Prometheus metrics:
+All components expose Prometheus metrics, scraped by the co-located OTel Collector:
 
 | Component | Metrics Port |
 |-----------|-------------|
@@ -453,45 +474,66 @@ All components expose Prometheus metrics:
 | Filer | 9326 |
 | S3 | 9327 |
 
+When an OTLP endpoint is configured, the OTel Collector exports metrics via gRPC or HTTP. Host-level metrics (CPU, memory, disk, network) are also available.
+
+## CI/CD
+
+The project includes a GitHub Actions pipeline for automated builds:
+
+| Workflow | Trigger | Description |
+|----------|---------|-------------|
+| **upstream-watch** | Scheduled | Monitors SeaweedFS releases and dispatches build events |
+| **build-and-release** | Dispatch / Manual | Builds BOSH release, packages tile, creates GitHub Release |
+| **dependency-tracker** | Scheduled | Tracks dependency versions and creates update issues |
+
 ## Project Structure
 
 ```
 bosh-seaweedfs/
-├── jobs/
-│   ├── seaweedfs-master/       # Master server
-│   ├── seaweedfs-volume/       # Volume server
-│   ├── seaweedfs-filer/        # Filer server
-│   ├── seaweedfs-s3/           # S3 gateway
-│   ├── seaweedfs-admin/        # Admin console
-│   ├── seaweedfs-broker/       # Service broker
-│   ├── route-registrar/        # CF route registration
-│   ├── register-broker/        # Broker registration errand
-│   ├── deregister-broker/      # Broker deregistration errand
-│   └── smoke-tests/            # S3 validation errand
-├── packages/
-│   ├── seaweedfs/              # SeaweedFS binary (v4.07)
-│   ├── seaweedfs-broker/       # Go broker binary
-│   ├── golang-1.21/            # Go toolchain
-│   ├── cf-cli/                 # CF CLI for errands
-│   └── smoke-tests-vendor/     # Vendored Python deps
-├── src/
-│   └── seaweedfs-broker/       # Go service broker source
-├── manifests/
-│   ├── seaweedfs.yml           # Multi-VM production manifest
-│   └── seaweedfs-single-vm.yml # Single-VM testing manifest
-├── scripts/
-│   ├── build-tile.sh           # Full tile build (release + deps + tile-generator)
-│   ├── build-release.sh        # BOSH release build
-│   ├── build-tile-dev.sh       # Dev tile build (no network deps)
-│   ├── get-next-version.sh     # Auto-increment version from tile.yml
-│   ├── add-blob.sh             # Download and add SeaweedFS blob
-│   └── vendor-smoke-test-deps.sh # Vendor Python deps for smoke tests
-├── tile.yml                    # Tanzu tile configuration (Kiln format)
-├── resources/
-│   └── icon.png                # Marketplace icon
-└── config/
-    ├── blobs.yml               # BOSH blob tracking
-    └── final.yml               # BOSH release config
++-- jobs/
+|   +-- seaweedfs-master/               Master server (BPM-managed)
+|   +-- seaweedfs-volume/               Volume server (BPM-managed)
+|   +-- seaweedfs-filer/                Filer server (BPM-managed, wrapper script)
+|   +-- seaweedfs-s3/                   S3 gateway (BPM-managed)
+|   +-- seaweedfs-admin/                Admin console (ctl-managed)
+|   +-- seaweedfs-broker/               Service broker (Go)
+|   +-- route-registrar/                CF route registration
+|   +-- register-broker/                Broker registration errand
+|   +-- deregister-broker/              Broker deregistration errand
+|   +-- smoke-tests/                    S3 validation errand
+|   +-- otel-collector/                 OpenTelemetry metrics collector
+|   +-- syslog-forwarder/              Log forwarding to external syslog
+|   +-- backup-agent/                   Scheduled backup agent
+|   +-- restore/                        Backup restore errand
+|   +-- upgrade-all-service-instances/  On-demand cluster upgrade errand
++-- packages/
+|   +-- seaweedfs/                      SeaweedFS binary
+|   +-- seaweedfs-broker/               Go broker binary
+|   +-- golang-1.21/                    Go toolchain
+|   +-- cf-cli/                         CF CLI for errands
+|   +-- smoke-tests-vendor/             Vendored Python deps
+|   +-- otel-collector/                 OpenTelemetry Collector binary
++-- src/
+|   +-- seaweedfs-broker/               Go service broker source
++-- scripts/
+|   +-- build-tile.sh                   Full tile build (release + deps + tile-generator)
+|   +-- build-release.sh                BOSH release build
+|   +-- build-tile-dev.sh               Dev tile build (no network deps)
+|   +-- get-next-version.sh             Auto-increment version from tile.yml
+|   +-- add-blob.sh                     Download and add SeaweedFS blob
+|   +-- fetch-upstream.sh               Fetch latest upstream SeaweedFS release
+|   +-- vendor-smoke-test-deps.sh       Vendor Python deps for smoke tests
+|   +-- vendor-dependencies.sh          Vendor Go + other dependencies
++-- .github/workflows/
+|   +-- build-and-release.yml           Unified build pipeline
+|   +-- 01-upstream-watch.yml           Upstream version monitor
+|   +-- dependency-tracker.yml          Dependency update tracker
++-- tile.yml                            Tanzu tile configuration (Kiln format)
++-- resources/
+|   +-- icon.png                        Marketplace icon
++-- config/
+    +-- blobs.yml                       BOSH blob tracking
+    +-- final.yml                       BOSH release config
 ```
 
 ## Development
