@@ -62,26 +62,26 @@ cleanup() {
     echo "Cleaning up test resources..."
 
     # Unbind and delete all service instances
-    for INST in ${SERVICE_INSTANCE} ${ON_DEMAND_SERVICE_INSTANCE}; do
-      cf unbind-service ${APP_NAME} ${INST} 2>/dev/null || true
-      cf delete-service ${INST} -f 2>/dev/null || true
+    for INST in "${SERVICE_INSTANCE}" "${ON_DEMAND_SERVICE_INSTANCE}"; do
+      cf unbind-service "${APP_NAME}" "${INST}" 2>/dev/null || true
+      cf delete-service "${INST}" -f 2>/dev/null || true
     done
 
     # Delete app
-    cf delete ${APP_NAME} -f 2>/dev/null || true
+    cf delete "${APP_NAME}" -f 2>/dev/null || true
 
     # Wait for service instances to be deleted (handles async deprovision)
     DEPROVISION_POLL_INTERVAL=10
     DEPROVISION_MAX_ITERATIONS=$(( ${ON_DEMAND_DEPROVISION_TIMEOUT:-20} * 60 / DEPROVISION_POLL_INTERVAL ))
 
-    for INST in ${SERVICE_INSTANCE} ${ON_DEMAND_SERVICE_INSTANCE}; do
+    for INST in "${SERVICE_INSTANCE}" "${ON_DEMAND_SERVICE_INSTANCE}"; do
       for i in $(seq 1 ${DEPROVISION_MAX_ITERATIONS}); do
-        if ! cf service ${INST} >/dev/null 2>&1; then
+        if ! cf service "${INST}" >/dev/null 2>&1; then
           echo "Service instance ${INST} deleted"
           break
         fi
         if [ $((i % 6)) -eq 0 ]; then
-          STATUS=$(cf service ${INST} 2>&1 | grep -i "status:" | head -1 || echo "checking...")
+          STATUS=$(cf service "${INST}" 2>&1 | grep -i "status:" | head -1 || echo "checking...")
           echo "  Waiting for ${INST} deletion... ${STATUS}"
         fi
         sleep ${DEPROVISION_POLL_INTERVAL}
@@ -89,7 +89,7 @@ cleanup() {
     done
 
     # Delete org (which also deletes space)
-    cf delete-org ${CF_ORG} -f 2>/dev/null || true
+    cf delete-org "${CF_ORG}" -f 2>/dev/null || true
 
     echo "Cleanup completed"
   else
@@ -126,8 +126,8 @@ if [ "${SKIP_SSL}" = "true" ]; then
   SSL_FLAG="--skip-ssl-validation"
 fi
 
-cf api ${CF_API} ${SSL_FLAG}
-cf auth ${CF_USER} "${CF_PASS}"
+cf api "${CF_API}" ${SSL_FLAG}
+cf auth "${CF_USER}" "${CF_PASS}"
 
 echo "Authentication successful"
 
@@ -136,18 +136,18 @@ echo "Step 2: Create organization and space"
 echo "--------------------------------------"
 
 # Create org if it doesn't exist
-if ! cf org ${CF_ORG} >/dev/null 2>&1; then
-  cf create-org ${CF_ORG}
+if ! cf org "${CF_ORG}" >/dev/null 2>&1; then
+  cf create-org "${CF_ORG}"
 fi
 
-cf target -o ${CF_ORG}
+cf target -o "${CF_ORG}"
 
 # Create space if it doesn't exist
-if ! cf space ${CF_SPACE} >/dev/null 2>&1; then
-  cf create-space ${CF_SPACE}
+if ! cf space "${CF_SPACE}" >/dev/null 2>&1; then
+  cf create-space "${CF_SPACE}"
 fi
 
-cf target -o ${CF_ORG} -s ${CF_SPACE}
+cf target -o "${CF_ORG}" -s "${CF_SPACE}"
 
 echo "Targeted: ${CF_ORG}/${CF_SPACE}"
 
@@ -161,7 +161,7 @@ fi
 
 echo "Service '${SERVICE_NAME}' found in marketplace"
 
-if ! cf marketplace -e ${SERVICE_NAME} | grep -q "${PLAN_NAME}"; then
+if ! cf marketplace -e "${SERVICE_NAME}" | grep -q "${PLAN_NAME}"; then
   fail "Plan '${PLAN_NAME}' not found for service '${SERVICE_NAME}'"
 fi
 
@@ -172,17 +172,17 @@ echo "Step 4: Create service instance"
 echo "--------------------------------"
 
 # Delete existing service instance if present
-cf delete-service ${SERVICE_INSTANCE} -f 2>/dev/null || true
+cf delete-service "${SERVICE_INSTANCE}" -f 2>/dev/null || true
 sleep 5
 
-cf create-service ${SERVICE_NAME} ${PLAN_NAME} ${SERVICE_INSTANCE}
+cf create-service "${SERVICE_NAME}" "${PLAN_NAME}" "${SERVICE_INSTANCE}"
 
 # Wait for service to be created
 echo "Waiting for service instance to be ready..."
 SERVICE_READY=false
 for i in $(seq 1 ${TIMEOUT_MINUTES}); do
   # Get full service output for debugging
-  SERVICE_OUTPUT=$(cf service ${SERVICE_INSTANCE} 2>&1)
+  SERVICE_OUTPUT=$(cf service "${SERVICE_INSTANCE}" 2>&1)
 
   # Check for various success indicators (handles both sync and async services)
   # CF CLI v8 format: "status: create succeeded" or just shows service details without "in progress"
@@ -213,7 +213,7 @@ done
 
 if [ "${SERVICE_READY}" != "true" ]; then
   echo "Final service status:"
-  cf service ${SERVICE_INSTANCE}
+  cf service "${SERVICE_INSTANCE}"
   fail "Service instance creation timed out"
 fi
 
@@ -222,7 +222,7 @@ echo "Step 5: Push test application"
 echo "------------------------------"
 
 # Delete existing app if present
-cf delete ${APP_NAME} -f 2>/dev/null || true
+cf delete "${APP_NAME}" -f 2>/dev/null || true
 
 # Copy vendored Python dependencies to app directory
 VENDOR_PKG=/var/vcap/packages/smoke-tests-vendor/vendor
@@ -235,7 +235,7 @@ else
 fi
 
 cd ${APP_DIR}
-cf push ${APP_NAME} --no-start
+cf push "${APP_NAME}" --no-start
 
 echo "Application pushed successfully"
 
@@ -243,7 +243,7 @@ echo ""
 echo "Step 6: Bind service to application"
 echo "------------------------------------"
 
-cf bind-service ${APP_NAME} ${SERVICE_INSTANCE}
+cf bind-service "${APP_NAME}" "${SERVICE_INSTANCE}"
 echo "Service bound successfully"
 
 echo ""
@@ -251,15 +251,15 @@ echo "Step 7: Start application"
 echo "-------------------------"
 
 # Start the app - capture failure for debugging
-if ! cf start ${APP_NAME}; then
+if ! cf start "${APP_NAME}"; then
   echo ""
   echo "App failed to start. Getting logs..."
   echo ""
   echo "=== Recent App Logs ==="
-  cf logs ${APP_NAME} --recent || true
+  cf logs "${APP_NAME}" --recent || true
   echo ""
   echo "=== App Events ==="
-  cf events ${APP_NAME} || true
+  cf events "${APP_NAME}" || true
   echo ""
   fail "Application failed to start (see logs above)"
 fi
@@ -269,7 +269,7 @@ echo "Waiting for application to start..."
 APP_STARTED=false
 for i in $(seq 1 30); do
   # CF CLI v8 shows app details differently - check for running instances
-  APP_OUTPUT=$(cf app ${APP_NAME} 2>&1)
+  APP_OUTPUT=$(cf app "${APP_NAME}" 2>&1)
 
   # Check if app is running by looking for "running" instances
   if echo "${APP_OUTPUT}" | grep -qE "instances:.*[1-9]+/[0-9]+.*running|#0.*running"; then
@@ -293,10 +293,10 @@ done
 
 if [ "${APP_STARTED}" != "true" ]; then
   echo "App details:"
-  cf app ${APP_NAME}
+  cf app "${APP_NAME}"
   echo ""
   echo "App logs:"
-  cf logs ${APP_NAME} --recent
+  cf logs "${APP_NAME}" --recent
   fail "Application failed to start"
 fi
 
@@ -330,7 +330,7 @@ if [ "${HTTP_CODE}" = "200" ]; then
 else
   echo ""
   echo "App logs:"
-  cf logs ${APP_NAME} --recent | tail -50
+  cf logs "${APP_NAME}" --recent | tail -50
   fail "Shared plan test endpoint returned HTTP ${HTTP_CODE}: ${RESPONSE}"
 fi
 
@@ -340,21 +340,21 @@ echo "---------------------------------------------------"
 
 # Save current binding info
 echo "Unbinding service to test credential revocation..."
-cf unbind-service ${APP_NAME} ${SERVICE_INSTANCE}
-cf restage ${APP_NAME} 2>/dev/null || true
+cf unbind-service "${APP_NAME}" "${SERVICE_INSTANCE}"
+cf restage "${APP_NAME}" 2>/dev/null || true
 
 # Wait for app to restart
 sleep 15
 
 # Re-bind for continued testing
 echo "Re-binding service for continued tests..."
-cf bind-service ${APP_NAME} ${SERVICE_INSTANCE}
-cf restage ${APP_NAME} 2>/dev/null || true
+cf bind-service "${APP_NAME}" "${SERVICE_INSTANCE}"
+cf restage "${APP_NAME}" 2>/dev/null || true
 
 # Wait for app to restart
 APP_STARTED=false
 for i in $(seq 1 30); do
-  APP_OUTPUT=$(cf app ${APP_NAME} 2>&1)
+  APP_OUTPUT=$(cf app "${APP_NAME}" 2>&1)
   if echo "${APP_OUTPUT}" | grep -qE "instances:.*[1-9]+/[0-9]+.*running|#0.*running"; then
     APP_STARTED=true
     break
@@ -381,7 +381,7 @@ if [ "${TEST_ON_DEMAND}" = "true" ] && [ -n "${ON_DEMAND_PLAN_NAME}" ]; then
   echo "Timeout: ${ON_DEMAND_TIMEOUT_MINUTES} minutes"
 
   # Verify on-demand plan exists in marketplace
-  if ! cf marketplace -e ${SERVICE_NAME} | grep -q "${ON_DEMAND_PLAN_NAME}"; then
+  if ! cf marketplace -e "${SERVICE_NAME}" | grep -q "${ON_DEMAND_PLAN_NAME}"; then
     fail "On-demand plan '${ON_DEMAND_PLAN_NAME}' not found for service '${SERVICE_NAME}'"
   fi
   echo "On-demand plan '${ON_DEMAND_PLAN_NAME}' found in marketplace"
@@ -391,24 +391,24 @@ if [ "${TEST_ON_DEMAND}" = "true" ] && [ -n "${ON_DEMAND_PLAN_NAME}" ]; then
   echo "--------------------------------------------"
 
   # Delete existing on-demand service instance if present and wait for deletion
-  if cf service ${ON_DEMAND_SERVICE_INSTANCE} >/dev/null 2>&1; then
+  if cf service "${ON_DEMAND_SERVICE_INSTANCE}" >/dev/null 2>&1; then
     echo "Existing on-demand instance found, deleting..."
-    cf delete-service ${ON_DEMAND_SERVICE_INSTANCE} -f 2>/dev/null || true
+    cf delete-service "${ON_DEMAND_SERVICE_INSTANCE}" -f 2>/dev/null || true
 
     # If the instance is stuck in a failed state, purge it
     echo "Waiting for existing instance to be deleted..."
     DELETE_TIMEOUT=60  # iterations (10s each = 10 minutes)
     for i in $(seq 1 ${DELETE_TIMEOUT}); do
-      if ! cf service ${ON_DEMAND_SERVICE_INSTANCE} >/dev/null 2>&1; then
+      if ! cf service "${ON_DEMAND_SERVICE_INSTANCE}" >/dev/null 2>&1; then
         echo "Existing instance deleted"
         break
       fi
 
       # Check if delete is stuck in failed state
-      DELETE_OUTPUT=$(cf service ${ON_DEMAND_SERVICE_INSTANCE} 2>&1)
+      DELETE_OUTPUT=$(cf service "${ON_DEMAND_SERVICE_INSTANCE}" 2>&1)
       if echo "${DELETE_OUTPUT}" | grep -qi "delete failed"; then
         echo "Delete failed, purging service instance..."
-        cf purge-service-instance ${ON_DEMAND_SERVICE_INSTANCE} -f 2>/dev/null || true
+        cf purge-service-instance "${ON_DEMAND_SERVICE_INSTANCE}" -f 2>/dev/null || true
         sleep 5
         break
       fi
@@ -421,13 +421,13 @@ if [ "${TEST_ON_DEMAND}" = "true" ] && [ -n "${ON_DEMAND_PLAN_NAME}" ]; then
     done
   fi
 
-  cf create-service ${SERVICE_NAME} ${ON_DEMAND_PLAN_NAME} ${ON_DEMAND_SERVICE_INSTANCE}
+  cf create-service "${SERVICE_NAME}" "${ON_DEMAND_PLAN_NAME}" "${ON_DEMAND_SERVICE_INSTANCE}"
 
   # Wait for on-demand service to be ready (BOSH deployment in progress)
   echo "Waiting for on-demand service instance (BOSH deployment in progress)..."
   SERVICE_READY=false
   for i in $(seq 1 ${ON_DEMAND_TIMEOUT_MINUTES}); do
-    SERVICE_OUTPUT=$(cf service ${ON_DEMAND_SERVICE_INSTANCE} 2>&1)
+    SERVICE_OUTPUT=$(cf service "${ON_DEMAND_SERVICE_INSTANCE}" 2>&1)
 
     if echo "${SERVICE_OUTPUT}" | grep -qi "create succeeded"; then
       echo "On-demand service instance created successfully"
@@ -450,7 +450,7 @@ if [ "${TEST_ON_DEMAND}" = "true" ] && [ -n "${ON_DEMAND_PLAN_NAME}" ]; then
 
   if [ "${SERVICE_READY}" != "true" ]; then
     echo "Final service status:"
-    cf service ${ON_DEMAND_SERVICE_INSTANCE}
+    cf service "${ON_DEMAND_SERVICE_INSTANCE}"
     fail "On-demand service instance creation timed out after ${ON_DEMAND_TIMEOUT_MINUTES} minutes"
   fi
 
@@ -459,17 +459,17 @@ if [ "${TEST_ON_DEMAND}" = "true" ] && [ -n "${ON_DEMAND_PLAN_NAME}" ]; then
   echo "-------------------------------------------------"
 
   # Unbind shared service first so VCAP_SERVICES has only the on-demand binding
-  cf unbind-service ${APP_NAME} ${SERVICE_INSTANCE} 2>/dev/null || true
+  cf unbind-service "${APP_NAME}" "${SERVICE_INSTANCE}" 2>/dev/null || true
 
   # Bind on-demand service
-  cf bind-service ${APP_NAME} ${ON_DEMAND_SERVICE_INSTANCE}
+  cf bind-service "${APP_NAME}" "${ON_DEMAND_SERVICE_INSTANCE}"
   echo "On-demand service bound successfully"
 
   # Restage to pick up new VCAP_SERVICES
   echo "Restaging app with on-demand service binding..."
-  if ! cf restage ${APP_NAME}; then
+  if ! cf restage "${APP_NAME}"; then
     echo "App restage failed. Getting logs..."
-    cf logs ${APP_NAME} --recent || true
+    cf logs "${APP_NAME}" --recent || true
     fail "Application failed to restage with on-demand binding"
   fi
 
@@ -477,7 +477,7 @@ if [ "${TEST_ON_DEMAND}" = "true" ] && [ -n "${ON_DEMAND_PLAN_NAME}" ]; then
   echo "Waiting for application to restart..."
   APP_STARTED=false
   for i in $(seq 1 30); do
-    APP_OUTPUT=$(cf app ${APP_NAME} 2>&1)
+    APP_OUTPUT=$(cf app "${APP_NAME}" 2>&1)
     if echo "${APP_OUTPUT}" | grep -qE "instances:.*[1-9]+/[0-9]+.*running|#0.*running"; then
       APP_STARTED=true
       break
@@ -490,8 +490,8 @@ if [ "${TEST_ON_DEMAND}" = "true" ] && [ -n "${ON_DEMAND_PLAN_NAME}" ]; then
   done
 
   if [ "${APP_STARTED}" != "true" ]; then
-    cf app ${APP_NAME}
-    cf logs ${APP_NAME} --recent
+    cf app "${APP_NAME}"
+    cf logs "${APP_NAME}" --recent
     fail "Application failed to restart after on-demand binding"
   fi
 
@@ -517,7 +517,7 @@ if [ "${TEST_ON_DEMAND}" = "true" ] && [ -n "${ON_DEMAND_PLAN_NAME}" ]; then
       fail "On-demand plan tests did not pass: ${RESPONSE}"
     fi
   else
-    cf logs ${APP_NAME} --recent | tail -50
+    cf logs "${APP_NAME}" --recent | tail -50
     fail "On-demand plan test endpoint returned HTTP ${HTTP_CODE}: ${RESPONSE}"
   fi
 fi
