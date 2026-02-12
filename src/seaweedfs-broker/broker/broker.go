@@ -1162,18 +1162,18 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 
 	releasesSection := fmt.Sprintf(`releases:
 - name: %s
-  version: "%s"`,
+  version: "%s"
+- name: bpm
+  version: "latest"`,
 		b.config.BOSH.ReleaseName,
 		b.config.BOSH.ReleaseVersion,
 	)
 
-	// Add routing and bpm releases if we have NATS config for route registration
+	// Add routing release if we have NATS config for route registration
 	if canRouteRegister {
 		releasesSection += fmt.Sprintf(`
 - name: routing
-  version: "%s"
-- name: bpm
-  version: "latest"`, routingReleaseVersion)
+  version: "%s"`, routingReleaseVersion)
 	}
 
 	// Generate NATS route_registrar YAML block (reused for master and S3 instance groups)
@@ -1203,9 +1203,7 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
     release: routing
     consumes:
       nats: nil
-      nats-tls: nil
-  - name: bpm
-    release: bpm`
+      nats-tls: nil`
 
 		natsRouteRegProps = fmt.Sprintf(`
     nats:
@@ -1237,7 +1235,9 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
       seaweedfs:
         master:
           port: 9333
-          default_replication: "%s"`,
+          default_replication: "%s"
+  - name: bpm
+    release: bpm`,
 		b.config.BOSH.ReleaseName,
 		cfg.Replication,
 	)
@@ -1263,7 +1263,9 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 	filerHost := ""
 	filerJobsSection := fmt.Sprintf(`  jobs:
   - name: seaweedfs-filer
-    release: %s`,
+    release: %s
+  - name: bpm
+    release: bpm`,
 		b.config.BOSH.ReleaseName,
 	)
 
@@ -1288,7 +1290,9 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 	volumeHost := ""
 	volumeJobsSection := fmt.Sprintf(`  jobs:
   - name: seaweedfs-volume
-    release: %s`,
+    release: %s
+  - name: bpm
+    release: bpm`,
 		b.config.BOSH.ReleaseName,
 	)
 
@@ -1328,7 +1332,9 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
               actions:
               - Admin
               - Read
-              - Write`,
+              - Write
+  - name: bpm
+    release: bpm`,
 		b.config.BOSH.ReleaseName,
 		instance.AdminAccessKey,
 		instance.AdminSecretKey,
