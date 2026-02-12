@@ -1,3 +1,6 @@
+backup-tools/awscli-exe-linux-x86_64.zip:
+  size: 66781495
+  sha: sha256:25f24e492074be063be04bd1308137e5cb3e55d31095a0ca7624564c2d128193
 cf-cli/cf8-cli-8.8.2-linux64.tgz:
   size: 9377091
   sha: sha256:5f8a0c12a257b0eaf90f0d98cfcb617d1c0e2360e43cda4e64045c0f5a50248d
@@ -8,8 +11,8 @@ otel-collector/otelcol-contrib.tar.gz:
   size: 64650989
   sha: sha256:c3857481e9eb7319cd1e6978ed76c2a9e934400cdacf7a6b696579a858fde3ef
 seaweedfs-broker/seaweedfs-broker.tar.gz:
-  size: 105806
-  sha: sha256:0424bbba9fd372c5e1fc620d8c57f9fb29acaf295bad4722c6e5e1d768e45ec3
+  size: 3421734
+  sha: sha256:e781fa598f5fa9ba1586ba7fb876bc93f8b371447a7f47ded97617b626cb21b6
 seaweedfs/linux_amd64.tar.gz:
   size: 40265195
   sha: sha256:61c8a132c6753cc6726ab6dcc761e0fb2ae2bf7310b1276e82427f4a33dc2a7b

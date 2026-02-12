@@ -49,7 +49,7 @@ METADATA
 echo "[$(date)] Uploading backup to S3..."
 export AWS_ACCESS_KEY_ID="<%= p('backup.s3_access_key') %>"
 export AWS_SECRET_ACCESS_KEY="<%= p('backup.s3_secret_key') %>"
-aws s3 sync "${BACKUP_DIR}" \
+/var/vcap/packages/backup-tools/bin/aws s3 sync "${BACKUP_DIR}" \
   "s3://<%= p('backup.s3_bucket') %>/${DEPLOYMENT}/${TIMESTAMP}/" \
   --endpoint-url "<%= p('backup.s3_endpoint') %>" 2>&1 || {
     echo "[$(date)] Warning: S3 upload failed"

@@ -20,4 +20,10 @@ CERT_EOF
 fi
 <% end %>
 
+<% if p('tls.ca') != "" %>
+# Symlink security.toml to /etc/seaweedfs/ where SeaweedFS auto-discovers it
+mkdir -p /etc/seaweedfs
+ln -sf /var/vcap/jobs/seaweedfs-s3/config/security.toml /etc/seaweedfs/security.toml
+<% end %>
+
 exit 0

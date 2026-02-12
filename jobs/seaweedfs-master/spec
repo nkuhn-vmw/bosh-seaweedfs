@@ -10,6 +10,7 @@ templates:
   ca.pem.erb: config/certs/ca.pem
   cert.pem.erb: config/certs/cert.pem
   key.pem.erb: config/certs/key.pem
+  security.toml.erb: config/security.toml
 
 provides:
   - name: seaweedfs-master

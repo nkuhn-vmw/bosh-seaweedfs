@@ -141,6 +141,12 @@ func (b *Broker) Router() http.Handler {
 	api.HandleFunc("/service_instances/{instance_id}/service_bindings/{binding_id}", b.unbindHandler).Methods("DELETE")
 	api.HandleFunc("/service_instances/{instance_id}/service_bindings/{binding_id}", b.getBindingHandler).Methods("GET")
 
+	// Admin API endpoints (for upgrade-all errand)
+	admin := r.PathPrefix("/admin").Subrouter()
+	admin.Use(b.authMiddleware)
+	admin.HandleFunc("/deployments", b.listDeploymentsHandler).Methods("GET")
+	admin.HandleFunc("/deployments/{deployment}/upgrade", b.upgradeDeploymentHandler).Methods("POST")
+
 	return r
 }
 
@@ -552,6 +558,99 @@ func (b *Broker) getBindingHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	b.writeJSON(w, http.StatusOK, b.buildCredentials(instance, binding))
+}
+
+// Admin API handlers
+
+func (b *Broker) listDeploymentsHandler(w http.ResponseWriter, r *http.Request) {
+	instances, err := b.store.ListInstances()
+	if err != nil {
+		b.writeError(w, http.StatusInternalServerError, "StoreError", err.Error())
+		return
+	}
+
+	type deploymentInfo struct {
+		DeploymentName string `json:"deployment_name"`
+		InstanceID     string `json:"instance_id"`
+		State          string `json:"state"`
+	}
+
+	deployments := make([]deploymentInfo, 0)
+	for _, inst := range instances {
+		if inst.DeploymentName != "" {
+			deployments = append(deployments, deploymentInfo{
+				DeploymentName: inst.DeploymentName,
+				InstanceID:     inst.ID,
+				State:          inst.State,
+			})
+		}
+	}
+
+	b.writeJSON(w, http.StatusOK, deployments)
+}
+
+func (b *Broker) upgradeDeploymentHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	deploymentName := vars["deployment"]
+
+	if b.boshClient == nil {
+		b.writeError(w, http.StatusInternalServerError, "BOSHNotConfigured", "BOSH director not configured")
+		return
+	}
+
+	// Find instance by deployment name
+	instances, err := b.store.ListInstances()
+	if err != nil {
+		b.writeError(w, http.StatusInternalServerError, "StoreError", err.Error())
+		return
+	}
+
+	var instance *store.ServiceInstance
+	for _, inst := range instances {
+		if inst.DeploymentName == deploymentName {
+			instance = inst
+			break
+		}
+	}
+
+	if instance == nil {
+		b.writeError(w, http.StatusNotFound, "DeploymentNotFound",
+			fmt.Sprintf("No instance found for deployment %s", deploymentName))
+		return
+	}
+
+	plan := b.findPlan(instance.ServiceID, instance.PlanID)
+	if plan == nil {
+		b.writeError(w, http.StatusInternalServerError, "PlanNotFound",
+			fmt.Sprintf("Plan %s not found for service %s", instance.PlanID, instance.ServiceID))
+		return
+	}
+
+	// Regenerate manifest with current release version and redeploy
+	manifest := b.generateDedicatedManifest(instance, plan)
+	log.Printf("Upgrading deployment %s with current release version", deploymentName)
+
+	task, err := b.boshClient.Deploy(manifest)
+	if err != nil {
+		b.writeError(w, http.StatusInternalServerError, "DeployError",
+			fmt.Sprintf("Failed to start deployment: %v", err))
+		return
+	}
+
+	// Wait synchronously so the errand knows success/failure
+	task, err = b.boshClient.WaitForTask(task.ID, 30*time.Minute)
+	if err != nil {
+		b.writeError(w, http.StatusInternalServerError, "DeployFailed",
+			fmt.Sprintf("Deployment failed: %v", err))
+		return
+	}
+
+	log.Printf("Upgrade of deployment %s completed successfully (task %d)", deploymentName, task.ID)
+	b.writeJSON(w, http.StatusOK, map[string]any{
+		"deployment": deploymentName,
+		"task_id":    task.ID,
+		"state":      "done",
+	})
 }
 
 // Helper methods

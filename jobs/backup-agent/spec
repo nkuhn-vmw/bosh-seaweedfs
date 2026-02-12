@@ -10,6 +10,7 @@ templates:
 
 packages:
   - seaweedfs
+  - backup-tools
 
 consumes:
   - name: seaweedfs-master

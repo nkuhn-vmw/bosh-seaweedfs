@@ -1,0 +1,5 @@
+---
+name: backup-tools
+dependencies: []
+files:
+  - backup-tools/awscli-exe-linux-x86_64.zip

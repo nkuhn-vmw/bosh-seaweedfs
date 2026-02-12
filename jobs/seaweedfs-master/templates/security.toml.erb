@@ -1,0 +1,12 @@
+<% if p('tls.ca') != "" %>
+[grpc]
+ca = "/var/vcap/jobs/seaweedfs-master/config/certs/ca.pem"
+
+[grpc.master]
+cert = "/var/vcap/jobs/seaweedfs-master/config/certs/cert.pem"
+key = "/var/vcap/jobs/seaweedfs-master/config/certs/key.pem"
+
+[grpc.client]
+cert = "/var/vcap/jobs/seaweedfs-master/config/certs/cert.pem"
+key = "/var/vcap/jobs/seaweedfs-master/config/certs/key.pem"
+<% end %>

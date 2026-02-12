@@ -69,6 +69,17 @@ else
   echo "OTel Collector blob already present" >&2
 fi
 
+# AWS CLI v2 (for backup/restore S3 operations)
+if [[ ! -f "blobs/backup-tools/awscli-exe-linux-x86_64.zip" ]]; then
+  mkdir -p blobs/backup-tools
+  echo "Downloading AWS CLI v2..." >&2
+  curl -sL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" \
+    -o "blobs/backup-tools/awscli-exe-linux-x86_64.zip"
+  bosh add-blob "blobs/backup-tools/awscli-exe-linux-x86_64.zip" "backup-tools/awscli-exe-linux-x86_64.zip" >&2
+else
+  echo "AWS CLI blob already present" >&2
+fi
+
 # CF CLI (for smoke tests)
 CF_CLI_VERSION="8.8.2"
 if [[ ! -f "blobs/cf-cli/cf8-cli-${CF_CLI_VERSION}-linux64.tgz" ]]; then
