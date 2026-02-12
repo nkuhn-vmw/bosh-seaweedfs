@@ -2,7 +2,12 @@
 set -e -x
 
 # Install AWS CLI v2
-unzip backup-tools/awscli-exe-linux-x86_64.zip -d /tmp/awscli-install
-chmod +x /tmp/awscli-install/aws/install
-/tmp/awscli-install/aws/install --install-dir "${BOSH_INSTALL_TARGET}" --bin-dir "${BOSH_INSTALL_TARGET}/bin"
-rm -rf /tmp/awscli-install
+# Extract in compile directory (not /tmp which is noexec on BOSH compilation VMs)
+unzip backup-tools/awscli-exe-linux-x86_64.zip
+
+# Bypass the install script entirely — it tries to exec binaries from the
+# extract dir which also fails on noexec. Just copy the dist directly.
+mkdir -p "${BOSH_INSTALL_TARGET}/bin"
+cp -a aws/dist "${BOSH_INSTALL_TARGET}/dist"
+chmod +x "${BOSH_INSTALL_TARGET}/dist/aws"
+ln -sf ../dist/aws "${BOSH_INSTALL_TARGET}/bin/aws"
