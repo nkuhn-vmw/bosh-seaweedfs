@@ -646,7 +646,7 @@ packages:
             release: seaweedfs
         lifecycle: errand
         post_deploy: true
-        run_default: true
+        run_post_deploy_errand_default: when-changed
         memory: 512
         ephemeral_disk: 2048
         instances: 1
@@ -679,7 +679,7 @@ packages:
             release: seaweedfs
         lifecycle: errand
         post_deploy: true
-        run_default: false
+        run_post_deploy_errand_default: off
         memory: 512
         ephemeral_disk: 2048
         instances: 1

@@ -30,6 +30,8 @@ processes:
 <% end %>
 <% if !p('seaweedfs.s3.iam.enabled') %>
       - -iam=false
+<% else %>
+      - -iam.readOnly=false
 <% end %>
     env:
       GOGC: "80"

@@ -37,6 +37,9 @@ case $1 in
     <% if !p('seaweedfs.s3.iam.enabled') %>
     # Disable IAM API if explicitly turned off (it's enabled by default in SeaweedFS)
     EXTRA_ARGS="${EXTRA_ARGS} -iam=false"
+    <% else %>
+    # SeaweedFS 4.x defaults -iam.readOnly=true; enable writes for broker IAM user management
+    EXTRA_ARGS="${EXTRA_ARGS} -iam.readOnly=false"
     <% end %>
 
     exec chpst -u vcap:vcap ${WEED} s3 \
