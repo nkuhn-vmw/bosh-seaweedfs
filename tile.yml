@@ -3,7 +3,7 @@ name: seaweedfs
 icon_file: resources/icon.png
 label: SeaweedFS Object Storage
 metadata_version: 3.0
-version: "1.0.140"
+version: "1.0.141"
 description: |
   SeaweedFS is a distributed storage system for blobs, objects, files, and data lake.
   This tile provides S3-compatible object storage with both shared and dedicated cluster options.
@@ -147,6 +147,7 @@ packages:
             otlp_endpoint: (( .properties.otlp_endpoint.value ))
             otlp_protocol: (( .properties.otlp_protocol.value ))
             otlp_ca_cert: (( .properties.otlp_ca_cert.value ))
+            otlp_auth_header: (( .properties.otlp_auth_header.value ))
             scrape_interval: (( .properties.otel_scrape_interval.value ))
             enable_host_metrics: (( .properties.otel_host_metrics.value ))
           nats:
@@ -203,6 +204,7 @@ packages:
             otlp_endpoint: (( .properties.otlp_endpoint.value ))
             otlp_protocol: (( .properties.otlp_protocol.value ))
             otlp_ca_cert: (( .properties.otlp_ca_cert.value ))
+            otlp_auth_header: (( .properties.otlp_auth_header.value ))
             scrape_interval: (( .properties.otel_scrape_interval.value ))
             enable_host_metrics: (( .properties.otel_host_metrics.value ))
           nats:
@@ -260,6 +262,7 @@ packages:
             otlp_endpoint: (( .properties.otlp_endpoint.value ))
             otlp_protocol: (( .properties.otlp_protocol.value ))
             otlp_ca_cert: (( .properties.otlp_ca_cert.value ))
+            otlp_auth_header: (( .properties.otlp_auth_header.value ))
             scrape_interval: (( .properties.otel_scrape_interval.value ))
             enable_host_metrics: (( .properties.otel_host_metrics.value ))
           backup:
@@ -491,6 +494,7 @@ packages:
                   otlp_endpoint: (( .properties.otlp_endpoint.value ))
                   otlp_protocol: (( .properties.otlp_protocol.value ))
                   otlp_ca_cert: (( .properties.otlp_ca_cert.value ))
+                  otlp_auth_header: (( .properties.otlp_auth_header.value ))
                   scrape_interval: (( .properties.otel_scrape_interval.value ))
                   enable_host_metrics: (( .properties.otel_host_metrics.value ))
                 backup:
@@ -879,6 +883,11 @@ forms:
             label: gRPC
           - name: http
             label: HTTP
+      - name: otlp_auth_header
+        type: secret
+        label: OTLP Authorization Header
+        description: "Authorization header value for OTLP endpoint (e.g. 'Bearer <token>')"
+        optional: true
       - name: otlp_ca_cert
         type: text
         label: OTLP TLS CA Certificate

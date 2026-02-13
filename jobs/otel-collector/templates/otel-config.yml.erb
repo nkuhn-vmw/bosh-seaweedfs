@@ -75,8 +75,12 @@ exporters:
     tls:
       ca_file: /var/vcap/jobs/otel-collector/config/ca.pem
     <% end %>
+    <% auth_header = p('otel.otlp_auth_header', '') %>
     <% otlp_headers = p('otel.otlp_headers') %>
-    <% if otlp_headers.is_a?(Hash) && !otlp_headers.empty? %>
+    <% if !auth_header.to_s.empty? %>
+    headers:
+      Authorization: '<%= auth_header %>'
+    <% elsif otlp_headers.is_a?(Hash) && !otlp_headers.empty? %>
     headers:
       <% otlp_headers.each do |k, v| %>
       <%= k %>: '<%= v %>'

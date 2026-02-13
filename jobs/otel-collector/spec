@@ -27,6 +27,9 @@ properties:
   otel.otlp_ca_cert:
     description: "TLS CA cert for OTLP endpoint"
     default: ""
+  otel.otlp_auth_header:
+    description: "Authorization header value for OTLP endpoint (e.g. 'Bearer <token>')"
+    default: ""
   otel.otlp_headers:
     description: "Authentication headers for OTLP endpoint (key=value pairs)"
     default: {}

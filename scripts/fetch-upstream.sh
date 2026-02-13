@@ -32,6 +32,23 @@ SHA256=$(sha256sum "${STAGING_DIR}/blobs/seaweedfs-${VERSION}-linux-amd64.tar.gz
 echo "${SHA256}  blobs/seaweedfs-${VERSION}-linux-amd64.tar.gz" > "${STAGING_DIR}/checksums.sha256"
 echo "SHA-256: ${SHA256}"
 
+# Verify against upstream checksums if available
+CHECKSUM_URL="https://github.com/seaweedfs/seaweedfs/releases/download/${VERSION}/checksums.txt"
+echo "Checking upstream checksums at: ${CHECKSUM_URL}"
+if curl -sfL -o "${STAGING_DIR}/upstream-checksums.txt" "${CHECKSUM_URL}"; then
+  EXPECTED=$(grep "${ASSET_NAME}" "${STAGING_DIR}/upstream-checksums.txt" | awk '{print $1}')
+  if [ -n "${EXPECTED}" ] && [ "${SHA256}" = "${EXPECTED}" ]; then
+    echo "Checksum VERIFIED against upstream checksums.txt"
+  elif [ -n "${EXPECTED}" ]; then
+    echo "ERROR: Checksum mismatch! Expected: ${EXPECTED}, Got: ${SHA256}"
+    exit 1
+  else
+    echo "WARNING: Asset not found in upstream checksums.txt"
+  fi
+else
+  echo "WARNING: No upstream checksums available (checksums.txt not found)"
+fi
+
 # Verify the tarball contains the expected binary
 echo "Verifying archive contents..."
 tar tzf "${STAGING_DIR}/blobs/seaweedfs-${VERSION}-linux-amd64.tar.gz" | head -5

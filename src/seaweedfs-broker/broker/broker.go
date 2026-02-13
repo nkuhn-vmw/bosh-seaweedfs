@@ -1357,19 +1357,24 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 		if b.config.OTEL.OTLPCACert != "" {
 			otelCACertYAML = fmt.Sprintf("\n        otlp_ca_cert: |\n%s", formatCertForYAML(b.config.OTEL.OTLPCACert, 10))
 		}
+		otelAuthHeaderYAML := ""
+		if b.config.OTEL.OTLPAuthHeader != "" {
+			otelAuthHeaderYAML = fmt.Sprintf("\n        otlp_auth_header: \"%s\"", b.config.OTEL.OTLPAuthHeader)
+		}
 		otelJob = fmt.Sprintf(`
   - name: otel-collector
     release: %s
     properties:
       otel:
         otlp_endpoint: "%s"
-        otlp_protocol: "%s"%s
+        otlp_protocol: "%s"%s%s
         scrape_interval: "%s"
         enable_host_metrics: %v`,
 			b.config.BOSH.ReleaseName,
 			b.config.OTEL.OTLPEndpoint,
 			b.config.OTEL.OTLPProtocol,
 			otelCACertYAML,
+			otelAuthHeaderYAML,
 			b.config.OTEL.ScrapeInterval,
 			b.config.OTEL.EnableHostMetrics,
 		)

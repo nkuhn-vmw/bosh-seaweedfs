@@ -12,6 +12,11 @@ templates:
   key.pem.erb: config/certs/key.pem
   security.toml.erb: config/security.toml
 
+consumes:
+  - name: seaweedfs-master
+    type: seaweedfs-master
+    optional: true
+
 provides:
   - name: seaweedfs-master
     type: seaweedfs-master

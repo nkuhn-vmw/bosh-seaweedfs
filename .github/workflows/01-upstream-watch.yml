@@ -8,7 +8,7 @@ jobs:
   check-upstream:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Detect new SeaweedFS release
         id: detect
@@ -30,21 +30,41 @@ jobs:
         if: steps.detect.outputs.has_new == 'true'
         run: |
           VERSION=${{ steps.detect.outputs.new_version }}
+          ASSET_NAME="linux_amd64_full.tar.gz"
           mkdir -p staged-artifacts/blobs
 
           # Download Linux amd64 binary
-          DOWNLOAD_URL="https://github.com/seaweedfs/seaweedfs/releases/download/${VERSION}/linux_amd64_full.tar.gz"
+          DOWNLOAD_URL="https://github.com/seaweedfs/seaweedfs/releases/download/${VERSION}/${ASSET_NAME}"
           echo "Downloading SeaweedFS ${VERSION} from ${DOWNLOAD_URL}"
           curl -L -o "staged-artifacts/blobs/seaweedfs-${VERSION}-linux-amd64.tar.gz" "${DOWNLOAD_URL}"
 
           # Compute SHA-256 checksum
-          sha256sum "staged-artifacts/blobs/seaweedfs-${VERSION}-linux-amd64.tar.gz" | tee staged-artifacts/checksums.sha256
+          SHA256=$(sha256sum "staged-artifacts/blobs/seaweedfs-${VERSION}-linux-amd64.tar.gz" | awk '{print $1}')
+          echo "${SHA256}  blobs/seaweedfs-${VERSION}-linux-amd64.tar.gz" > staged-artifacts/checksums.sha256
+          echo "SHA-256: ${SHA256}"
+
+          # Verify against upstream checksums if available
+          CHECKSUM_URL="https://github.com/seaweedfs/seaweedfs/releases/download/${VERSION}/checksums.txt"
+          echo "Checking upstream checksums at: ${CHECKSUM_URL}"
+          if curl -sfL -o "staged-artifacts/upstream-checksums.txt" "${CHECKSUM_URL}"; then
+            EXPECTED=$(grep "${ASSET_NAME}" "staged-artifacts/upstream-checksums.txt" | awk '{print $1}')
+            if [ -n "${EXPECTED}" ] && [ "${SHA256}" = "${EXPECTED}" ]; then
+              echo "Checksum VERIFIED against upstream checksums.txt"
+            elif [ -n "${EXPECTED}" ]; then
+              echo "ERROR: Checksum mismatch! Expected: ${EXPECTED}, Got: ${SHA256}"
+              exit 1
+            else
+              echo "WARNING: Asset not found in upstream checksums.txt"
+            fi
+          else
+            echo "WARNING: No upstream checksums available (checksums.txt not found)"
+          fi
 
           echo "Download complete: $(ls -lh staged-artifacts/blobs/)"
 
       - name: Stage artifacts
         if: steps.detect.outputs.has_new == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: staged-upstream-${{ steps.detect.outputs.new_version }}
           path: staged-artifacts/
@@ -52,7 +72,7 @@ jobs:
 
       - name: Dispatch to Stage 2
         if: steps.detect.outputs.has_new == 'true'
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3
         with:
           event-type: new-upstream-version
           client-payload: '{"version": "${{ steps.detect.outputs.new_version }}"}'

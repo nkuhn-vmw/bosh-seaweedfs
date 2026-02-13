@@ -8,7 +8,7 @@ jobs:
   check-dependencies:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Check Go version
         id: go-version
@@ -60,7 +60,7 @@ jobs:
 
       - name: Create summary issue
         if: steps.seaweedfs-version.outputs.has_update == 'true' || steps.go-version.outputs.has_update == 'true'
-        uses: peter-evans/create-issue-from-file@v5
+        uses: peter-evans/create-issue-from-file@e8ef132d6df98ed982188e460ebb3b5d4ef3a9cd # v5
         with:
           title: "Dependency updates available"
           content-filepath: /tmp/issue-body.md

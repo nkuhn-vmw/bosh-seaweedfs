@@ -279,6 +279,7 @@ otel:
   otlp_ca_cert: |
 <%= otlp_ca.gsub(/^/, '    ') %>
 <% end %>
+  otlp_auth_header: "<%= p('seaweedfs.broker.on_demand.otel.otlp_auth_header', '') %>"
   scrape_interval: "<%= p('seaweedfs.broker.on_demand.otel.scrape_interval', '30s') %>"
   enable_host_metrics: <%= p('seaweedfs.broker.on_demand.otel.enable_host_metrics', true) %>
 

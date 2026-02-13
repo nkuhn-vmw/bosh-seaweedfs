@@ -225,6 +225,7 @@ type OTELConfig struct {
 	OTLPEndpoint      string `yaml:"otlp_endpoint"`
 	OTLPProtocol      string `yaml:"otlp_protocol"`
 	OTLPCACert        string `yaml:"otlp_ca_cert"`
+	OTLPAuthHeader    string `yaml:"otlp_auth_header"`
 	ScrapeInterval    string `yaml:"scrape_interval"`
 	EnableHostMetrics bool   `yaml:"enable_host_metrics"`
 }

@@ -94,6 +94,19 @@ instance_groups:
           seaweedfs:
             s3:
               filer: "((seaweedfs_filer_address)):8888"
+              iam:
+                enabled: true
+              config:
+                enabled: true
+                identities:
+                  - name: admin
+                    credentials:
+                      - accessKey: ((seaweedfs-admin-access-key))
+                        secretKey: ((seaweedfs-admin-secret-key))
+                    actions:
+                      - "Admin"
+                      - "Read"
+                      - "Write"
           tls:
             ca: ((seaweedfs-ca.certificate))
             certificate: ((seaweedfs-s3-tls.certificate))
@@ -104,6 +117,14 @@ variables:
     type: value
   - name: seaweedfs_filer_address
     type: value
+  - name: seaweedfs-admin-access-key
+    type: password
+    options:
+      length: 20
+  - name: seaweedfs-admin-secret-key
+    type: password
+    options:
+      length: 40
   - name: seaweedfs-ca
     type: certificate
     options:

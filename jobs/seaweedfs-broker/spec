@@ -253,6 +253,9 @@ properties:
   seaweedfs.broker.on_demand.otel.otlp_ca_cert:
     description: "TLS CA certificate for OTLP endpoint on on-demand clusters"
     default: ""
+  seaweedfs.broker.on_demand.otel.otlp_auth_header:
+    description: "Authorization header value for OTLP endpoint on on-demand clusters"
+    default: ""
   seaweedfs.broker.on_demand.otel.scrape_interval:
     description: "Metrics scrape interval for on-demand clusters (e.g. 30s, 1m)"
     default: "30s"
