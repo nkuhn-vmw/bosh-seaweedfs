@@ -3,7 +3,7 @@ name: seaweedfs
 icon_file: resources/icon.png
 label: SeaweedFS Object Storage
 metadata_version: 3.0
-version: "1.0.149"
+version: "1.0.150"
 description: |
   SeaweedFS is a distributed storage system for blobs, objects, files, and data lake.
   This tile provides S3-compatible object storage with both shared and dedicated cluster options.
@@ -678,6 +678,7 @@ packages:
           - name: recreate-all-service-instances
             release: seaweedfs
         lifecycle: errand
+        post_deploy: true
         run_default: false
         memory: 512
         ephemeral_disk: 2048

@@ -15,7 +15,7 @@ postgresql-client/postgresql-16.4.tar.bz2:
   sha: sha256:971766d645aa73e93b9ef4e3be44201b4f45b5477095b049125403f9f3386d6f
 seaweedfs-broker/seaweedfs-broker.tar.gz:
   size: 3424678
-  sha: sha256:7bda5a07ae68ec37fa95a29145862f90d3cb8c1e12077b6cb863c92f021dee91
+  sha: sha256:befefd183a7e8642e984c2954c6c66968c55308c25760544a1fdd7172f277f3c
 seaweedfs/linux_amd64.tar.gz:
   size: 50164114
   sha: sha256:64ec9f243977adda9b82cb288db47552aa2cef06b3a4f3a794eca69751a9ca13
