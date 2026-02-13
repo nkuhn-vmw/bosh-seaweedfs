@@ -244,20 +244,7 @@ func (c *Client) Deploy(manifest []byte) (*Task, error) {
 
 // DeployWithRecreate redeploys a deployment and recreates all VMs (preserving persistent disks)
 func (c *Client) DeployWithRecreate(manifest []byte) (*Task, error) {
-	if err := c.authenticate(); err != nil {
-		return nil, fmt.Errorf("failed to authenticate: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", c.directorURL+"/deployments", bytes.NewReader(manifest))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set("Content-Type", "text/yaml")
-	req.Header.Set("X-Bosh-Deploy-Recreate", "true")
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doRequestWithContentType("POST", "/deployments?recreate=true", bytes.NewReader(manifest), "text/yaml")
 	if err != nil {
 		return nil, fmt.Errorf("failed to deploy with recreate: %w", err)
 	}

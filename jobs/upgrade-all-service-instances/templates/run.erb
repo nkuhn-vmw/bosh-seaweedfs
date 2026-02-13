@@ -19,9 +19,6 @@ CANARIES=<%= p('upgrade.canaries') %>
 MAX_IN_FLIGHT=<%= p('upgrade.max_in_flight') %>
 FAIL_FAST=<%= p('upgrade.fail_fast') %>
 
-BOSH_URL="<%= p('bosh.url') %>"
-BOSH_CA_CERT_FILE="/var/vcap/jobs/upgrade-all-service-instances/config/bosh-ca.pem"
-
 LOG_DIR="/var/vcap/sys/log/upgrade-all-service-instances"
 mkdir -p "${LOG_DIR}"
 
@@ -69,7 +66,6 @@ upgrade_deployment() {
   local deployment=$1
   echo "[$(date)] Upgrading ${deployment}..."
 
-  # Trigger recreate via BOSH (re-deploys with latest release)
   local result
   result=$(curl -sf -u "${BROKER_USER}:${BROKER_PASS}" \
     -X POST "${BROKER_URL}/admin/deployments/${deployment}/upgrade" 2>&1) || {
