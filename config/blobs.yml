@@ -11,8 +11,8 @@ otel-collector/otelcol-contrib.tar.gz:
   size: 64650989
   sha: sha256:c3857481e9eb7319cd1e6978ed76c2a9e934400cdacf7a6b696579a858fde3ef
 seaweedfs-broker/seaweedfs-broker.tar.gz:
-  size: 3422958
-  sha: sha256:0e17087497f3de5b511b7a44b4ae9c73ad2ddf1df3e73cd87cf422ff0c794429
+  size: 3422967
+  sha: sha256:221c57f6ab8c816a04322dbe602d90258619196e6a0a9378605b10957af35017
 seaweedfs/linux_amd64.tar.gz:
   size: 40265195
   sha: sha256:61c8a132c6753cc6726ab6dcc761e0fb2ae2bf7310b1276e82427f4a33dc2a7b
