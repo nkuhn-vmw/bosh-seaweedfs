@@ -1,0 +1,32 @@
+---
+name: recreate-all-service-instances
+
+templates:
+  run.erb: bin/run
+
+packages: []
+
+consumes:
+  - name: seaweedfs-broker
+    type: seaweedfs-broker
+    optional: true
+
+properties:
+  recreate.broker_url:
+    description: "Broker admin API URL (used when BOSH link not available)"
+    default: ""
+  recreate.broker_username:
+    description: "Broker admin username"
+    default: ""
+  recreate.broker_password:
+    description: "Broker admin password"
+    default: ""
+  recreate.canaries:
+    description: "Number of canary instances to recreate first"
+    default: 1
+  recreate.max_in_flight:
+    description: "Maximum parallel recreates after canaries"
+    default: 1
+  recreate.fail_fast:
+    description: "Stop on first failure (true) or continue and report (false)"
+    default: true

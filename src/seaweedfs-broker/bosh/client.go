@@ -242,6 +242,41 @@ func (c *Client) Deploy(manifest []byte) (*Task, error) {
 	return c.GetTask(taskID)
 }
 
+// DeployWithRecreate redeploys a deployment and recreates all VMs (preserving persistent disks)
+func (c *Client) DeployWithRecreate(manifest []byte) (*Task, error) {
+	if err := c.authenticate(); err != nil {
+		return nil, fmt.Errorf("failed to authenticate: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", c.directorURL+"/deployments", bytes.NewReader(manifest))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "text/yaml")
+	req.Header.Set("X-Bosh-Deploy-Recreate", "true")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to deploy with recreate: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusFound && resp.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("deploy with recreate failed: %s - %s", resp.Status, string(body))
+	}
+
+	location := resp.Header.Get("Location")
+	taskID, err := extractTaskID(location)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract task ID from Location header %q: %w", location, err)
+	}
+
+	return c.GetTask(taskID)
+}
+
 // DeleteDeployment deletes a deployment
 func (c *Client) DeleteDeployment(name string) (*Task, error) {
 	resp, err := c.doRequest("DELETE", "/deployments/"+name+"?force=true", nil)

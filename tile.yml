@@ -637,14 +637,16 @@ packages:
             s3_access_key: (( .properties.backup_s3_access_key.value ))
             s3_secret_key: (( .properties.backup_s3_secret_key.value ))
 
-      # Upgrade all on-demand instances errand (manual trigger)
+      # Upgrade all on-demand instances errand (runs by default on every tile upgrade)
       - name: upgrade-all-service-instances
-        label: Errand - Upgrade All On-Demand Instances
+        label: Upgrade All On-Demand Service Instances
+        description: Upgrades on-demand service instances one-by-one. Should be run with every SeaweedFS tile upgrade.
         templates:
           - name: upgrade-all-service-instances
             release: seaweedfs
         lifecycle: errand
-        run_default: false
+        post_deploy: true
+        run_default: true
         memory: 512
         ephemeral_disk: 2048
         instances: 1
@@ -667,6 +669,30 @@ packages:
                 url: https://(( $director.hostname )):8443
                 client_id: (( $self.uaa_client_name ))
                 client_secret: (( $self.uaa_client_secret ))
+
+      # Recreate all on-demand instances errand (manual trigger for rolling repave)
+      - name: recreate-all-service-instances
+        label: Recreate All On-Demand Service Instances
+        description: Recreates on-demand service instances one-by-one. Use for rolling VM repave of existing service instances. Persistent disks are preserved.
+        templates:
+          - name: recreate-all-service-instances
+            release: seaweedfs
+        lifecycle: errand
+        run_default: false
+        memory: 512
+        ephemeral_disk: 2048
+        instances: 1
+        cpu: 1
+        static_ip: 0
+        dynamic_ip: 1
+        properties:
+          recreate:
+            broker_url: https://(( .properties.broker_route_name.value )).(( ..cf.cloud_controller.system_domain.value ))
+            broker_username: (( .properties.generated_broker_credentials.identity ))
+            broker_password: (( .properties.generated_broker_credentials.password ))
+            canaries: 1
+            max_in_flight: 1
+            fail_fast: true
 
   - name: bpm
     type: bosh-release

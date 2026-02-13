@@ -141,11 +141,12 @@ func (b *Broker) Router() http.Handler {
 	api.HandleFunc("/service_instances/{instance_id}/service_bindings/{binding_id}", b.unbindHandler).Methods("DELETE")
 	api.HandleFunc("/service_instances/{instance_id}/service_bindings/{binding_id}", b.getBindingHandler).Methods("GET")
 
-	// Admin API endpoints (for upgrade-all errand)
+	// Admin API endpoints (for upgrade-all and recreate-all errands)
 	admin := r.PathPrefix("/admin").Subrouter()
 	admin.Use(b.authMiddleware)
 	admin.HandleFunc("/deployments", b.listDeploymentsHandler).Methods("GET")
 	admin.HandleFunc("/deployments/{deployment}/upgrade", b.upgradeDeploymentHandler).Methods("POST")
+	admin.HandleFunc("/deployments/{deployment}/recreate", b.recreateDeploymentHandler).Methods("POST")
 
 	return r
 }
@@ -646,6 +647,70 @@ func (b *Broker) upgradeDeploymentHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	log.Printf("Upgrade of deployment %s completed successfully (task %d)", deploymentName, task.ID)
+	b.writeJSON(w, http.StatusOK, map[string]any{
+		"deployment": deploymentName,
+		"task_id":    task.ID,
+		"state":      "done",
+	})
+}
+
+func (b *Broker) recreateDeploymentHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	deploymentName := vars["deployment"]
+
+	if b.boshClient == nil {
+		b.writeError(w, http.StatusInternalServerError, "BOSHNotConfigured", "BOSH director not configured")
+		return
+	}
+
+	// Find instance by deployment name
+	instances, err := b.store.ListInstances()
+	if err != nil {
+		b.writeError(w, http.StatusInternalServerError, "StoreError", err.Error())
+		return
+	}
+
+	var instance *store.ServiceInstance
+	for _, inst := range instances {
+		if inst.DeploymentName == deploymentName {
+			instance = inst
+			break
+		}
+	}
+
+	if instance == nil {
+		b.writeError(w, http.StatusNotFound, "DeploymentNotFound",
+			fmt.Sprintf("No instance found for deployment %s", deploymentName))
+		return
+	}
+
+	plan := b.findPlan(instance.ServiceID, instance.PlanID)
+	if plan == nil {
+		b.writeError(w, http.StatusInternalServerError, "PlanNotFound",
+			fmt.Sprintf("Plan %s not found for service %s", instance.PlanID, instance.ServiceID))
+		return
+	}
+
+	// Regenerate manifest and redeploy with recreate flag (VMs recreated, persistent disks preserved)
+	manifest := b.generateDedicatedManifest(instance, plan)
+	log.Printf("Recreating deployment %s (persistent disks preserved)", deploymentName)
+
+	task, err := b.boshClient.DeployWithRecreate(manifest)
+	if err != nil {
+		b.writeError(w, http.StatusInternalServerError, "RecreateError",
+			fmt.Sprintf("Failed to start recreate: %v", err))
+		return
+	}
+
+	// Wait synchronously so the errand knows success/failure
+	task, err = b.boshClient.WaitForTask(task.ID, 30*time.Minute)
+	if err != nil {
+		b.writeError(w, http.StatusInternalServerError, "RecreateFailed",
+			fmt.Sprintf("Recreate failed: %v", err))
+		return
+	}
+
+	log.Printf("Recreate of deployment %s completed successfully (task %d)", deploymentName, task.ID)
 	b.writeJSON(w, http.StatusOK, map[string]any{
 		"deployment": deploymentName,
 		"task_id":    task.ID,
