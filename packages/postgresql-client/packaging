@@ -11,7 +11,8 @@ cd postgresql-16.4
   --prefix="${BOSH_INSTALL_TARGET}" \
   --without-readline \
   --without-zlib \
-  --without-openssl
+  --without-openssl \
+  --without-icu
 
 # Build only the client binaries and libpq
 make -C src/interfaces/libpq -j$(nproc)
