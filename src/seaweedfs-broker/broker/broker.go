@@ -1548,6 +1548,7 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 		instance.AdminSecretKey,
 	)
 	s3JobsSection += syslogJob
+	s3JobsSection += otelJob
 
 	// Add route_registrar to S3 instance group
 	if canRouteRegister && s3RouteHost != "" {
@@ -1583,6 +1584,7 @@ func (b *Broker) generateDedicatedManifest(instance *store.ServiceInstance, plan
 		instance.AdminPassword,
 	)
 	adminJobsSection += syslogJob
+	adminJobsSection += otelJob
 
 	if canRouteRegister && cfg.EnableAdminRoute {
 		adminHost = fmt.Sprintf("seaweedfs-admin-%s.%s", instance.ID[:8], b.config.CF.SystemDomain)
