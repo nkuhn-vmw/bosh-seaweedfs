@@ -34,7 +34,7 @@ echo "" >&2
 echo "=== Checking Blobs ===" >&2
 
 # SeaweedFS binary
-SEAWEEDFS_BLOB_VERSION="4.07"
+SEAWEEDFS_BLOB_VERSION="4.12"
 if [[ ! -f "blobs/seaweedfs/linux_amd64.tar.gz" ]]; then
   mkdir -p blobs/seaweedfs
   echo "Downloading SeaweedFS ${SEAWEEDFS_BLOB_VERSION}..." >&2
@@ -90,6 +90,18 @@ if [[ ! -f "blobs/cf-cli/cf8-cli-${CF_CLI_VERSION}-linux64.tgz" ]]; then
   bosh add-blob "blobs/cf-cli/cf8-cli-${CF_CLI_VERSION}-linux64.tgz" "cf-cli/cf8-cli-${CF_CLI_VERSION}-linux64.tgz" >&2
 else
   echo "CF CLI blob already present" >&2
+fi
+
+# PostgreSQL client (for filer postgres backend)
+PG_VERSION="16.4"
+if [[ ! -f "blobs/postgresql-client/postgresql-${PG_VERSION}.tar.bz2" ]]; then
+  mkdir -p blobs/postgresql-client
+  echo "Downloading PostgreSQL ${PG_VERSION} source..." >&2
+  curl -sL "https://ftp.postgresql.org/pub/source/v${PG_VERSION}/postgresql-${PG_VERSION}.tar.bz2" \
+    -o "blobs/postgresql-client/postgresql-${PG_VERSION}.tar.bz2"
+  bosh add-blob "blobs/postgresql-client/postgresql-${PG_VERSION}.tar.bz2" "postgresql-client/postgresql-${PG_VERSION}.tar.bz2" >&2
+else
+  echo "PostgreSQL client blob already present" >&2
 fi
 
 # Step 2: Create broker source tarball
