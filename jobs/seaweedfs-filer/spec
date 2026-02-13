@@ -2,6 +2,7 @@
 name: seaweedfs-filer
 packages:
   - seaweedfs
+  - postgresql-client
 templates:
   bpm.yml.erb: config/bpm.yml
   ctl.erb: bin/ctl
@@ -71,6 +72,27 @@ properties:
   seaweedfs.filer.mysql.database:
     description: "MySQL database name"
     default: "seaweedfs"
+  seaweedfs.filer.postgres.enabled:
+    description: "Enable PostgreSQL backend for filer"
+    default: false
+  seaweedfs.filer.postgres.hostname:
+    description: "PostgreSQL hostname"
+    default: "localhost"
+  seaweedfs.filer.postgres.port:
+    description: "PostgreSQL port"
+    default: 5432
+  seaweedfs.filer.postgres.username:
+    description: "PostgreSQL username"
+    default: "seaweedfs"
+  seaweedfs.filer.postgres.password:
+    description: "PostgreSQL password"
+    default: ""
+  seaweedfs.filer.postgres.database:
+    description: "PostgreSQL database name"
+    default: "seaweedfs"
+  seaweedfs.filer.postgres.sslmode:
+    description: "PostgreSQL SSL mode (disable, require, verify-ca, verify-full)"
+    default: "disable"
   tls.ca:
     description: "CA certificate for mTLS"
     default: ""

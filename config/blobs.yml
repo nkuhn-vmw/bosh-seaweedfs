@@ -10,6 +10,9 @@ golang/go1.21.6.linux-amd64.tar.gz:
 otel-collector/otelcol-contrib.tar.gz:
   size: 64650989
   sha: sha256:c3857481e9eb7319cd1e6978ed76c2a9e934400cdacf7a6b696579a858fde3ef
+postgresql-client/postgresql-16.4.tar.bz2:
+  size: 24765786
+  sha: sha256:971766d645aa73e93b9ef4e3be44201b4f45b5477095b049125403f9f3386d6f
 seaweedfs-broker/seaweedfs-broker.tar.gz:
   size: 3422967
   sha: sha256:221c57f6ab8c816a04322dbe602d90258619196e6a0a9378605b10957af35017

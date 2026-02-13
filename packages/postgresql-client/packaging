@@ -1,0 +1,27 @@
+#!/bin/bash
+set -e -x
+
+# Build PostgreSQL client tools (psql, pg_dump, pg_restore) from source
+tar xjf postgresql-client/postgresql-16.4.tar.bz2
+
+cd postgresql-16.4
+
+# Configure for client-only build
+./configure \
+  --prefix="${BOSH_INSTALL_TARGET}" \
+  --without-readline \
+  --without-zlib \
+  --without-openssl
+
+# Build only the client binaries and libpq
+make -C src/interfaces/libpq -j$(nproc)
+make -C src/bin/psql -j$(nproc)
+make -C src/bin/pg_dump -j$(nproc)
+
+# Install
+make -C src/interfaces/libpq install
+make -C src/bin/psql install
+make -C src/bin/pg_dump install
+
+# Verify
+ls -la "${BOSH_INSTALL_TARGET}/bin/"

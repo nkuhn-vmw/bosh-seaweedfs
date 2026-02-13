@@ -27,14 +27,17 @@ echo "[$(date)] Backing up filer metadata..."
     echo "[$(date)] Warning: filer metadata backup failed"
   }
 
-# 2. Volume data export (all file content via filer)
-echo "[$(date)] Backing up volume data via filer..."
-/var/vcap/packages/seaweedfs/weed filer.backup \
-  -filer="${FILER_URL}" \
-  -target="${BACKUP_DIR}/filer-data/" \
-  -timeAgo=87600h 2>&1 || {
+# 2. Volume data backup via weed shell (lock → backup → unlock)
+echo "[$(date)] Backing up volumes..."
+/var/vcap/packages/seaweedfs/weed shell -master="${MASTER_URL}" \
+  -filer="${FILER_URL}" <<WEED_SHELL 2>&1 || {
     echo "[$(date)] Warning: volume data backup failed"
   }
+lock
+volume.list
+volume.backup -target="${BACKUP_DIR}/volumes/"
+unlock
+WEED_SHELL
 
 # 3. IAM configuration export
 echo "[$(date)] Backing up IAM configuration..."

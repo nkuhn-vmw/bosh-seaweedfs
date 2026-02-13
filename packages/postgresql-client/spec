@@ -1,0 +1,5 @@
+---
+name: postgresql-client
+dependencies: []
+files:
+  - postgresql-client/postgresql-16.4.tar.bz2

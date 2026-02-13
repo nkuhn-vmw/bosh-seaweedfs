@@ -21,3 +21,17 @@ connection_max_open = 100
 connection_max_lifetime_seconds = 0
 interpolateParams = false
 <% end %>
+
+<% if p('seaweedfs.filer.postgres.enabled') %>
+[postgres2]
+enabled = true
+hostname = "<%= p('seaweedfs.filer.postgres.hostname') %>"
+port = <%= p('seaweedfs.filer.postgres.port') %>
+username = "<%= p('seaweedfs.filer.postgres.username') %>"
+password = "<%= p('seaweedfs.filer.postgres.password') %>"
+database = "<%= p('seaweedfs.filer.postgres.database') %>"
+sslmode = "<%= p('seaweedfs.filer.postgres.sslmode') %>"
+connection_max_idle = 2
+connection_max_open = 100
+connection_max_lifetime_seconds = 0
+<% end %>
