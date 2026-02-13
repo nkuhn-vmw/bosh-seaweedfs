@@ -152,6 +152,73 @@ def run_tests():
             "error": result
         }), 500
 
+@app.route('/create-bucket')
+def create_bucket():
+    """Test bucket creation and deletion (for on-demand cluster validation)."""
+    credentials, error = get_s3_credentials()
+    if error:
+        return jsonify({"status": "failed", "error": error}), 500
+
+    try:
+        import boto3
+        from botocore.config import Config as BotoConfig
+        from botocore.exceptions import ClientError
+    except ImportError:
+        return jsonify({"status": "failed", "error": "boto3 not installed"}), 500
+
+    endpoint = credentials.get('endpoint') or credentials.get('s3_endpoint') or credentials.get('uri')
+    access_key = (credentials.get('access_key_id') or credentials.get('accessKey') or
+                  credentials.get('access_key') or credentials.get('AccessKeyId') or
+                  credentials.get('username'))
+    secret_key = (credentials.get('secret_access_key') or credentials.get('secretKey') or
+                  credentials.get('secret_key') or credentials.get('SecretAccessKey') or
+                  credentials.get('password'))
+    region = credentials.get('region', 'us-east-1')
+    use_ssl = credentials.get('use_ssl', True)
+
+    protocol = 'https' if use_ssl else 'http'
+    endpoint_url = f"{protocol}://{endpoint}" if not endpoint.startswith('http') else endpoint
+
+    s3_client = boto3.client(
+        's3',
+        endpoint_url=endpoint_url,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        region_name=region,
+        config=BotoConfig(signature_version='s3v4', s3={'addressing_style': 'path'}),
+        verify=False
+    )
+
+    test_bucket = f"smoke-test-bucket-{uuid.uuid4().hex[:8]}"
+    results = []
+
+    # Test 1: Create bucket
+    try:
+        s3_client.create_bucket(Bucket=test_bucket)
+        results.append({"test": "create_bucket", "status": "passed", "bucket": test_bucket})
+    except ClientError as e:
+        return jsonify({"status": "failed", "error": f"create_bucket failed: {str(e)}"}), 500
+
+    # Test 2: Verify bucket exists
+    try:
+        s3_client.head_bucket(Bucket=test_bucket)
+        results.append({"test": "head_bucket", "status": "passed"})
+    except ClientError as e:
+        return jsonify({"status": "failed", "error": f"head_bucket failed: {str(e)}"}), 500
+
+    # Test 3: Delete bucket
+    try:
+        s3_client.delete_bucket(Bucket=test_bucket)
+        results.append({"test": "delete_bucket", "status": "passed"})
+    except ClientError as e:
+        return jsonify({"status": "failed", "error": f"delete_bucket failed: {str(e)}"}), 500
+
+    return jsonify({
+        "status": "passed",
+        "tests": results,
+        "message": "Bucket create/verify/delete completed successfully"
+    })
+
 @app.route('/health')
 def health():
     return jsonify({"status": "healthy"})

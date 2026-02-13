@@ -41,4 +41,11 @@ action(type="omfwd" target="<%= p('syslog.address').split(':')[0] %>"
 action(type="omfwd" target="<%= p('syslog.address').split(':')[0] %>"
   port="<%= p('syslog.address').split(':')[1] %>"
   protocol="udp" template="CfFormat")
+<% elsif p('syslog.transport') == 'relp' %>
+module(load="omrelp")
+action(type="omrelp" target="<%= p('syslog.address').split(':')[0] %>"
+  port="<%= p('syslog.address').split(':')[1] %>"
+  template="CfFormat"
+  queue.type="LinkedList" queue.size="50000"
+  action.resumeRetryCount="-1")
 <% end %>

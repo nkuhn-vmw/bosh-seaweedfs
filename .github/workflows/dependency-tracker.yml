@@ -45,8 +45,42 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check BPM release version
+        id: bpm-version
+        run: |
+          CURRENT=$(grep 'bpm-' resources/bpm-release.tgz 2>/dev/null | head -1 || echo "unknown")
+          LATEST=$(gh api repos/cloudfoundry/bpm-release/releases/latest --jq '.tag_name')
+          echo "current=${CURRENT}" >> $GITHUB_OUTPUT
+          echo "latest=${LATEST}" >> $GITHUB_OUTPUT
+          echo "BPM release latest: ${LATEST}"
+          if [ "${CURRENT}" != "${LATEST}" ]; then
+            echo "has_update=true" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check routing release version
+        id: routing-version
+        run: |
+          LATEST=$(gh api repos/cloudfoundry/routing-release/releases/latest --jq '.tag_name')
+          echo "latest=${LATEST}" >> $GITHUB_OUTPUT
+          echo "Routing release latest: ${LATEST}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check stemcell version
+        id: stemcell-version
+        run: |
+          CURRENT=$(grep 'version' tile.yml | grep -A1 stemcell_criteria | tail -1 | awk -F"'" '{print $2}')
+          LATEST=$(curl -s 'https://bosh.io/api/v1/stemcells/bosh-google-kvm-ubuntu-jammy-go_agent' | jq -r '.[0].version' 2>/dev/null || echo "unknown")
+          echo "current=${CURRENT}" >> $GITHUB_OUTPUT
+          echo "latest=${LATEST}" >> $GITHUB_OUTPUT
+          echo "Stemcell (ubuntu-jammy): current=${CURRENT}, latest=${LATEST}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Write issue body
-        if: steps.seaweedfs-version.outputs.has_update == 'true' || steps.go-version.outputs.has_update == 'true'
+        if: steps.seaweedfs-version.outputs.has_update == 'true' || steps.go-version.outputs.has_update == 'true' || steps.bpm-version.outputs.has_update == 'true'
         run: |
           cat > /tmp/issue-body.md << 'EOF'
           ## Dependency Updates Available
@@ -56,10 +90,13 @@ jobs:
           | SeaweedFS | ${{ steps.seaweedfs-version.outputs.current }} | ${{ steps.seaweedfs-version.outputs.latest }} |
           | Go | ${{ steps.go-version.outputs.current }} | ${{ steps.go-version.outputs.latest }} |
           | OTel Collector | — | ${{ steps.otel-version.outputs.latest }} |
+          | BPM Release | ${{ steps.bpm-version.outputs.current }} | ${{ steps.bpm-version.outputs.latest }} |
+          | Routing Release | — | ${{ steps.routing-version.outputs.latest }} |
+          | Stemcell (ubuntu-jammy) | ${{ steps.stemcell-version.outputs.current }} | ${{ steps.stemcell-version.outputs.latest }} |
           EOF
 
       - name: Create summary issue
-        if: steps.seaweedfs-version.outputs.has_update == 'true' || steps.go-version.outputs.has_update == 'true'
+        if: steps.seaweedfs-version.outputs.has_update == 'true' || steps.go-version.outputs.has_update == 'true' || steps.bpm-version.outputs.has_update == 'true'
         uses: peter-evans/create-issue-from-file@e8ef132d6df98ed982188e460ebb3b5d4ef3a9cd # v5
         with:
           title: "Dependency updates available"

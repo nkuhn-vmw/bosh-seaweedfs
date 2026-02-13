@@ -298,6 +298,8 @@ packages:
             release: seaweedfs
           - name: syslog-forwarder
             release: seaweedfs
+          - name: otel-collector
+            release: seaweedfs
           - name: route_registrar
             release: routing
             consumes:
@@ -321,6 +323,13 @@ packages:
             tls_enabled: (( .properties.syslog_tls_enabled.value ))
             ca_cert: (( .properties.syslog_ca_cert.value ))
             permitted_peer: (( .properties.syslog_permitted_peer.value ))
+          otel:
+            otlp_endpoint: (( .properties.otlp_endpoint.value ))
+            otlp_protocol: (( .properties.otlp_protocol.value ))
+            otlp_ca_cert: (( .properties.otlp_ca_cert.value ))
+            otlp_auth_header: (( .properties.otlp_auth_header.value ))
+            scrape_interval: (( .properties.otel_scrape_interval.value ))
+            enable_host_metrics: (( .properties.otel_host_metrics.value ))
           nats:
             tls:
               enabled: true
@@ -635,6 +644,7 @@ packages:
           - name: upgrade-all-service-instances
             release: seaweedfs
         lifecycle: errand
+        run_default: false
         memory: 512
         ephemeral_disk: 2048
         instances: 1
