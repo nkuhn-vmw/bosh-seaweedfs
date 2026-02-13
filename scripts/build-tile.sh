@@ -125,10 +125,34 @@ echo ""
 echo "=== Building Tile with tile-generator ==="
 "$TILE_CMD" build "$TILE_VERSION"
 
-# Step 5: Report results
+# Step 5: Post-process tile metadata
+# tile-generator cannot output boolean false for run_post_deploy_errand_default
+# because its Python code uses `if job.get(...)` which filters out falsy values.
+# We pass "false" as a quoted string, then fix the metadata here.
+echo ""
+echo "=== Post-processing tile metadata ==="
+TILE_FILE="product/seaweedfs-${TILE_VERSION}.pivotal"
+if [[ -f "$TILE_FILE" ]]; then
+  PATCH_DIR=$(mktemp -d)
+  unzip -q -o "$TILE_FILE" metadata/seaweedfs.yml -d "$PATCH_DIR"
+  if grep -q "run_post_deploy_errand_default: 'false'" "$PATCH_DIR/metadata/seaweedfs.yml"; then
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      sed -i '' "s/run_post_deploy_errand_default: 'false'/run_post_deploy_errand_default: false/" "$PATCH_DIR/metadata/seaweedfs.yml"
+    else
+      sed -i "s/run_post_deploy_errand_default: 'false'/run_post_deploy_errand_default: false/" "$PATCH_DIR/metadata/seaweedfs.yml"
+    fi
+    # Update the .pivotal archive with patched metadata
+    (cd "$PATCH_DIR" && zip -q "$REPO_DIR/$TILE_FILE" metadata/seaweedfs.yml)
+    echo "Patched errand default: 'false' -> false (boolean)"
+  else
+    echo "No errand default patching needed"
+  fi
+  rm -rf "$PATCH_DIR"
+fi
+
+# Step 6: Report results
 echo ""
 echo "=== Build Complete ==="
-TILE_FILE="product/seaweedfs-${TILE_VERSION}.pivotal"
 
 if [[ -f "$TILE_FILE" ]]; then
   echo "Tile created: $TILE_FILE"
